@@ -1,7 +1,7 @@
 ---
-title: "Database Migrations and Schema Updates"
+title: "Database Migrations, Schema Updates, and Upgrade Guide"
 sidebarTitle: "Migrations"
-description: "Wacrm uses 30 numbered SQL migrations in supabase/migrations/. Apply them in order when setting up or upgrading your instance."
+description: "Wacrm uses 30 numbered SQL migrations in supabase/migrations/. Apply them in order when setting up a new instance or upgrading an existing one."
 ---
 
 Wacrm's database schema is managed through plain SQL migration files in `supabase/migrations/`. There are 30 files, numbered `001` through `030`. Every new install applies all 30 in order; upgrades apply only the files added since the last deploy. Each file is idempotent where possible — re-running a migration that has already been applied is safe.

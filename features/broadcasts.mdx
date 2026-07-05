@@ -1,5 +1,5 @@
 ---
-title: "WhatsApp Broadcast Campaigns"
+title: "WhatsApp Broadcast Campaigns — Templates and Tracking"
 sidebarTitle: "Broadcasts"
 description: "Send Meta-approved WhatsApp template messages to lists of contacts. Track delivery and read receipts per recipient with variable substitution per contact."
 ---
@@ -93,21 +93,17 @@ draft → sending → sent
 
 ## Scale and rate limits
 
-Broadcasts fan out in the background without blocking the HTTP response. When sending via the public API, the recipient list is capped at **1,000 recipients per request**. For campaigns larger than 1,000 contacts, split the recipient list into batches of up to 1,000 and call the endpoint once per batch.
-
-The server applies a per-user rate limit on broadcast initiation (independent of the per-message send limit) to protect your Meta API quota.
+Broadcasts fan out in the background without blocking the HTTP response. The server applies a per-user rate limit on broadcast initiation to protect your Meta API quota — this limits how often you can start a new broadcast, not the number of messages within a single broadcast.
 
 ## API access
 
-Broadcasts can be launched and monitored programmatically using a scoped API key with the `broadcasts:send` scope.
+Broadcasts can be launched programmatically via `POST /api/whatsapp/broadcast`. The endpoint requires an authenticated session and is rate-limited per user.
 
 ```bash
 # Launch a broadcast
-curl -X POST https://your-wacrm-instance.com/api/v1/broadcasts \
-  -H "Authorization: Bearer <api_key>" \
+curl -X POST https://your-wacrm-instance.com/api/whatsapp/broadcast \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "May Promo",
     "template_name": "may_promotion",
     "template_language": "en_US",
     "recipients": [
@@ -115,13 +111,24 @@ curl -X POST https://your-wacrm-instance.com/api/v1/broadcasts \
       { "phone": "+15559876543", "params": ["Bob"] }
     ]
   }'
-
-# Poll broadcast status
-curl https://your-wacrm-instance.com/api/v1/broadcasts/<id> \
-  -H "Authorization: Bearer <api_key>"
 ```
 
-See the [Broadcasts API reference](/api/broadcasts) for the full request schema, response shape, and pagination details for listing past broadcasts.
+The response includes a `results` array with a per-recipient `status` of `"sent"` or `"failed"`, along with aggregate `sent` and `failed` counts.
+
+```json
+{
+  "success": true,
+  "total": 2,
+  "sent": 2,
+  "failed": 0,
+  "results": [
+    { "phone": "+15551234567", "status": "sent", "whatsapp_message_id": "wamid.xxx" },
+    { "phone": "+15559876543", "status": "sent", "whatsapp_message_id": "wamid.yyy" }
+  ]
+}
+```
+
+The legacy `phone_numbers` + `template_params` shape is also accepted for backward compatibility. See the [Broadcasts API reference](/api/broadcasts) for full details.
 
 <Warning>
   Only **Meta-approved** templates can be sent in a broadcast. Submitting a template for review does not guarantee approval — Meta may reject templates that do not comply with their Business Messaging Policy. Always test your template with a small audience and verify `APPROVED` status before launching to your full contact list.

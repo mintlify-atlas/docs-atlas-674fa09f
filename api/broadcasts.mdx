@@ -1,5 +1,5 @@
 ---
-title: "Broadcasts API — Launch Template Campaigns"
+title: "Wacrm Broadcasts API: Send WhatsApp Template Campaigns"
 sidebarTitle: "Broadcasts"
 description: "POST /api/v1/broadcasts launches a WhatsApp template broadcast. GET /api/v1/broadcasts/{id} polls delivery progress. Requires broadcasts:send scope."
 ---
@@ -14,16 +14,16 @@ Creates a broadcast and begins sending in the background. The response is return
 
 ### Request body
 
-<ParamField body="name" type="string" required>
-  A human-readable label for the broadcast (e.g. `"July promo"`). Appears in the dashboard broadcast list.
+<ParamField body="name" type="string">
+  A human-readable label for the broadcast (e.g. `"July promo"`). Appears in the dashboard broadcast list. Optional — if omitted, Wacrm auto-generates a label from the template name.
 </ParamField>
 
 <ParamField body="template_name" type="string" required>
   The exact name of the approved WhatsApp template to send (e.g. `"promo_july"`). Must match the name as it appears in Meta Business Manager.
 </ParamField>
 
-<ParamField body="template_language" type="string" required>
-  The BCP-47 language code of the template variant to use (e.g. `"en_US"`).
+<ParamField body="template_language" type="string" default="en_US">
+  The BCP-47 language code of the template variant to use (e.g. `"en_US"`). Defaults to `en_US` when omitted.
 </ParamField>
 
 <ParamField body="recipients" type="object[]" required>

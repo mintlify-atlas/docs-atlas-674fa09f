@@ -1,7 +1,7 @@
 ---
-title: "Wacrm: Self-Hostable WhatsApp CRM Template"
+title: "Wacrm: Open-Source Self-Hostable WhatsApp CRM Template"
 sidebarTitle: "Introduction"
-description: "Wacrm is an MIT-licensed, forkable CRM template for WhatsApp Business. Own your data, skip seat fees, and deploy in an afternoon."
+description: "Wacrm is an MIT-licensed, forkable CRM template for WhatsApp Business. Own your data, skip the seat fees, and deploy in an afternoon."
 ---
 
 Wacrm is an open-source CRM template built on Next.js 16 and Supabase, designed for businesses and developers who want a full-featured WhatsApp Business inbox without the cost or lock-in of a hosted SaaS product. The model is simple: fork the repository, connect your own Supabase project and Meta Cloud API credentials, and deploy to any Node.js host. Your code, your database, your domain — and complete freedom to extend, rebrand, or redesign every part of it.
@@ -29,6 +29,15 @@ Wacrm is an open-source CRM template built on Next.js 16 and Supabase, designed 
   </Card>
   <Card title="AI Agents" icon="robot">
     Bring-your-own OpenAI or Anthropic key. One-click AI-drafted replies in the inbox, an optional auto-reply bot with a per-conversation cap and human handoff, and a knowledge base with hybrid Postgres full-text and pgvector semantic retrieval. Keys are stored AES-256-GCM-encrypted — no per-seat AI fee, your data stays yours.
+  </Card>
+  <Card title="Real-Time Dashboard" icon="chart-line">
+    Live metrics across every module: response times, daily message volume, pipeline value, and a cross-module activity feed. All numbers update in real time via Supabase Realtime.
+  </Card>
+  <Card title="Team Accounts" icon="users">
+    Invite teammates by link, assign role-based access (owner, admin, agent, viewer), and transfer account ownership. Every install is account-scoped so one shared inbox can be staffed by a whole team. Solo use stays single-user with zero extra setup.
+  </Card>
+  <Card title="Account Management" icon="gear">
+    Per-user profile settings: email, password, avatar, and global sign-out. Accounts are fully isolated — your data never touches another installation.
   </Card>
   <Card title="Public REST API" icon="code">
     A scoped, revocable API key system at `/api/v1`. Send messages, manage contacts and conversations, launch broadcasts, and receive real-time outbound event webhooks — all authenticated with `Authorization: Bearer` and rate-limited per key.

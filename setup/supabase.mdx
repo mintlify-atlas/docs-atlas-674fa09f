@@ -1,5 +1,5 @@
 ---
-title: "Configure Supabase for Wacrm"
+title: "Configure Supabase Database and Storage for Wacrm Setup"
 sidebarTitle: "Supabase"
 description: "Create a Supabase project, apply all 30 migrations, configure storage, and connect your Wacrm instance to Postgres with Row Level Security."
 ---
@@ -69,7 +69,7 @@ Wacrm uses [Supabase](https://supabase.com) as its entire data layer — Postgre
 
     The migrations are named descriptively so you always know what each one adds:
 
-    ```
+    ```text
     001_initial_schema.sql
     002_pipelines_enhancements.sql
     003_broadcast_recipient_wamid.sql

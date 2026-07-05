@@ -1,7 +1,7 @@
 ---
-title: "Messages API — Send WhatsApp Messages"
+title: "Wacrm Messages API: Send WhatsApp Messages via REST"
 sidebarTitle: "Messages"
-description: "POST /api/v1/messages — Send text, template, or media messages to any E.164 phone number. Requires messages:send scope."
+description: "Send text, template, and media WhatsApp messages from your scripts using POST /api/v1/messages. Requires the messages:send API key scope."
 ---
 
 The Messages API is the primary way to send WhatsApp messages from your own scripts and automations. Rather than working with internal conversation IDs, you pass an E.164 phone number and Wacrm handles everything else — looking up or creating the contact and conversation before dispatching the message through the WhatsApp Business API.

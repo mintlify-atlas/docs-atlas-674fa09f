@@ -1,5 +1,5 @@
 ---
-title: "Connect WhatsApp Business API to Wacrm"
+title: "Connect WhatsApp Business API to Wacrm for Messaging"
 sidebarTitle: "WhatsApp"
 description: "Register your Meta Cloud API app, configure the webhook endpoint, obtain a permanent access token, and verify your phone number in Wacrm settings."
 ---
@@ -85,7 +85,7 @@ Wacrm uses the **Meta Cloud API** — the official WhatsApp Business API — to 
     1. In your Meta app dashboard, go to **WhatsApp → Configuration**.
     2. Under **Webhook**, click **Edit**.
     3. Set the **Callback URL** to:
-       ```
+       ```text
        https://your-crm.example.com/api/whatsapp/webhook
        ```
     4. Set the **Verify Token** to any string you choose (e.g. a long random token). You will paste this same value into Wacrm in the next step.

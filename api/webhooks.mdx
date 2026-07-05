@@ -1,5 +1,5 @@
 ---
-title: "Webhooks API — Subscribe to Wacrm Events"
+title: "Wacrm Webhooks API: Manage Real-Time Event Endpoints"
 sidebarTitle: "Webhooks"
 description: "Register HTTPS endpoints to receive real-time event notifications from Wacrm. Verify payloads with HMAC-SHA256 signatures. Requires webhooks:manage scope."
 ---
@@ -209,13 +209,13 @@ Each request also includes these HTTP headers:
 
 Every delivery includes an `X-Wacrm-Signature` header with this format:
 
-```
+```text
 X-Wacrm-Signature: t=<unix_seconds>,v1=<hex>
 ```
 
 `v1` is computed as:
 
-```
+```text
 HMAC-SHA256(secret, "${t}.${rawBody}")
 ```
 

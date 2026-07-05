@@ -1,7 +1,7 @@
 ---
-title: "Interactive WhatsApp Flows"
+title: "Interactive Conversation Flows for WhatsApp Business"
 sidebarTitle: "Flows"
-description: "Design programmable WhatsApp conversations with buttons, lists, variables, and conditional routing. Flows run on inbound messages and guide contacts through multi-step interactions."
+description: "Build branching WhatsApp conversations with buttons, lists, variables, and conditional routing. Guide contacts through multi-step interactive dialogues."
 ---
 
 Flows are interactive conversational menus that run inside WhatsApp and guide a contact through a multi-step dialogue — presenting buttons, collecting free-text replies, branching on variables, and optionally handing off to a human agent. Unlike [Automations](/features/automations), which are silent background workflows that execute a fixed step list, Flows maintain live state for each contact and wait for their responses before advancing. When a Flow is handling a conversation, it takes priority over the AI auto-reply bot and over automations — nothing else runs on that message until the Flow finishes or hands off.
@@ -47,7 +47,7 @@ A Flow is a directed graph of nodes connected by edges. Each node has a `node_ty
 
 Any `send_message`, `send_media` caption, or `collect_input` prompt can embed the value of a captured variable using the `{{vars.X}}` syntax, where `X` is the `var_key` set by an upstream `collect_input` node.
 
-```
+```text
 Hello {{vars.name}}, thanks for your order number {{vars.order_id}}!
 ```
 

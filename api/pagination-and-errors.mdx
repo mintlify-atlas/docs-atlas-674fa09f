@@ -1,5 +1,5 @@
 ---
-title: "Pagination, Errors, and Response Format"
+title: "Wacrm API Pagination, Error Codes, and Response Format"
 sidebarTitle: "Pagination & Errors"
 description: "Every Wacrm API list endpoint uses keyset cursor pagination. Error responses follow a consistent envelope with stable error codes."
 ---
@@ -66,7 +66,7 @@ When `next_cursor` is `null`, you have reached the last page.
 
 Fetch the first page, then follow the cursor until `next_cursor` is `null`:
 
-```
+```bash
 GET /api/v1/contacts?limit=50
 → { "data": [...], "meta": { "next_cursor": "eyJ..." } }
 

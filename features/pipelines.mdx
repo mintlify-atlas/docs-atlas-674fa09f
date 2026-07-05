@@ -1,5 +1,5 @@
 ---
-title: "Sales Pipelines and Deal Tracking"
+title: "Sales Pipelines: Kanban Deal Tracking for WhatsApp CRM"
 sidebarTitle: "Pipelines"
 description: "Manage deals through a Kanban-style sales pipeline in Wacrm. Each deal links to a WhatsApp conversation for full context alongside every stage."
 ---
@@ -36,7 +36,7 @@ Each deal record carries the following fields, sourced directly from the `Deal` 
 | `title` | `string` | Deal name displayed on the Kanban card. |
 | `value` | `number` | Monetary value of the deal. |
 | `currency` | `string?` | Currency code (e.g. `USD`). Defaults to the account-level currency set in migration 021. |
-| `status` | `'open' \| 'won' \| 'lost'` | Outcome status. Won/lost deals can be filtered separately from open ones. |
+| `status` | `'open' \| 'won' \| 'lost'` (optional) | Outcome status. Won/lost deals can be filtered separately from open ones. Defaults to `'open'` when not set. |
 | `pipeline_id` | `string` | The pipeline this deal belongs to. |
 | `stage_id` | `string` | The current stage. Updated on drag-and-drop. |
 | `contact_id` | `string \| null` | The linked contact. `null` if the contact was deleted after the deal was created (history preserved). |

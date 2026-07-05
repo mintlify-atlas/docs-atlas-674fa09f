@@ -1,0 +1,77 @@
+---
+title: "Authenticate Requests to the Wacrm API"
+sidebarTitle: "Authentication"
+description: "Every Wacrm API request uses a bearer API key. Learn how to create, scope, and revoke keys, and how to pass them in the Authorization header."
+---
+
+Every request to the Wacrm public API authenticates with an **API key** passed as a bearer token in the `Authorization` header. Keys are account-scoped — a single key acts on exactly one account and can only perform the actions its granted scopes permit. There are no sessions, cookies, or OAuth flows involved in API access.
+
+## Sending the Key
+
+Include your key in the `Authorization` header on every request:
+
+```http
+Authorization: Bearer wacrm_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+A minimal `curl` example:
+
+```bash
+curl https://your-crm.example.com/api/v1/me \
+  -H "Authorization: Bearer wacrm_live_xxx"
+```
+
+## Creating a Key
+
+Only **admins and owners** can create API keys. Keys are created in the dashboard and the full plaintext is shown exactly once.
+
+1. Open **Settings → API keys → New API key** in the dashboard.
+2. Give the key a descriptive name — use the name of the integration or service that will consume it so you can identify it later.
+3. Select the **scopes** the key needs. Grant the minimum set required — a key can do only what its scopes explicitly allow, regardless of who created it.
+4. Click **Create** and **copy the key immediately**. Wacrm stores only a SHA-256 hash of the key, so the plaintext can never be retrieved or displayed again.
+
+<Warning>
+  If you lose an API key, it cannot be recovered. Wacrm stores only a SHA-256 hash — the original plaintext is gone the moment you close the creation dialog. Revoke the lost key immediately and create a replacement.
+</Warning>
+
+## Scopes
+
+A key's capabilities are defined entirely by the scopes granted to it at creation — independent of the role of the user who created it. Grant the minimum set of scopes your integration actually needs.
+
+| Scope | Allows |
+|-------|--------|
+| `messages:send` | Send WhatsApp messages |
+| `messages:read` | Read messages and their delivery status |
+| `contacts:read` | List and read contacts |
+| `contacts:write` | Create and update contacts |
+| `conversations:read` | List and read conversations |
+| `broadcasts:send` | Launch broadcast campaigns |
+| `webhooks:manage` | Register and manage outbound event webhooks |
+
+A key with **no scopes** still authenticates successfully and can call `GET /api/v1/me`. This is useful for verifying that a key is valid and active without performing any real action.
+
+## Verifying a Key with `GET /api/v1/me`
+
+`GET /api/v1/me` requires only a valid key — no scope needed. It returns the account the key is bound to and the full list of scopes it carries. Use it to confirm that a key works end-to-end and to discover its capabilities programmatically.
+
+```bash
+curl https://your-crm.example.com/api/v1/me \
+  -H "Authorization: Bearer wacrm_live_xxx"
+```
+
+```json
+{
+  "data": {
+    "account": { "id": "...", "name": "Acme Inc" },
+    "key": { "id": "...", "scopes": ["messages:send"] }
+  }
+}
+```
+
+## Revoking a Key
+
+Go to **Settings → API keys → Revoke** next to the key you want to disable. Revocation takes effect on the key's very next request — there is no propagation delay. Revoked keys remain visible in the key list as a permanent audit trail; they are never deleted automatically.
+
+<Note>
+  API keys are **account-scoped**: one key belongs to exactly one Wacrm account and cannot be used to access data in any other account. There is no cross-account access.
+</Note>

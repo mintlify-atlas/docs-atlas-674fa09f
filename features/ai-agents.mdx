@@ -1,0 +1,139 @@
+---
+title: "AI Reply Assistant and Auto-Reply Bot"
+sidebarTitle: "AI Agents"
+description: "Bring your own OpenAI or Anthropic key to get AI-drafted replies, an auto-reply bot with human handoff, and a knowledge base grounded in your own content."
+---
+
+Wacrm's AI features follow a bring-your-own-key (BYOK) model — there is no per-seat AI fee and no Wacrm-run inference service. Each account pastes its own OpenAI or Anthropic key under **AI Agents → Setup**; Wacrm calls the provider directly using that key, so your conversation data never leaves your own infrastructure. The key is stored AES-256-GCM-encrypted at rest (the same encryption used for WhatsApp access tokens) and is never returned to the client after saving — only a `has_key` flag is exposed.
+
+<CardGroup cols={2}>
+  <Card title="AI Draft" icon="wand-magic-sparkles">
+    A **✨** button in the inbox composer reads the recent conversation (up to the last 20 messages by default) and drops a suggested reply into the text box for the agent to review, edit, and send. The draft endpoint (`POST /api/ai/draft`) never sends or stores anything — it is read-only and only runs when an agent explicitly clicks the button. Requires an agent role or higher.
+  </Card>
+  <Card title="Auto-reply bot" icon="robot">
+    When enabled, inbound messages that were not handled by a Flow and that have no agent assigned automatically receive an LLM-generated reply. The bot is bounded by a per-conversation cap and performs a clean human handoff when it cannot help confidently or when the contact asks for a person.
+  </Card>
+  <Card title="Knowledge base" icon="book-open">
+    Paste your FAQs, policies, product details, or any reference content. The relevant excerpts are retrieved into every draft and every auto-reply using hybrid search — Postgres full-text search is always active; optional semantic pgvector search activates when you add an embeddings key.
+  </Card>
+  <Card title="Playground" icon="flask">
+    A test-chat interface under **AI Agents → Playground** lets you message your agent and see its grounded, multi-turn replies before it ever answers a real customer. Runs the exact same code path as the auto-reply bot — knowledge retrieval, your configured system prompt, and your provider — so what you see in the playground is what your customers will see.
+  </Card>
+</CardGroup>
+
+## Setup
+
+<Steps>
+  <Step title="Open AI Agents in the sidebar">
+    Navigate to **AI Agents** in the left sidebar. This section has two tabs: **Playground** (test chat) and **Setup** (configuration). Go to **Setup**.
+  </Step>
+  <Step title="Choose a provider and enter your API key">
+    Select either **OpenAI** or **Anthropic** from the provider dropdown. Paste your API key into the key field. The model is a free-text input pre-filled with a sensible default — you can change it to any model your key can access (e.g. `gpt-4o`, `gpt-4o-mini`, `claude-3-5-sonnet-20241022`).
+  </Step>
+  <Step title="Optionally add an embeddings key">
+    For semantic search in the knowledge base, paste an **OpenAI embeddings key** (OpenAI only — Anthropic has no embeddings API). Without it, the knowledge base still works via Postgres full-text search. With it, retrieval uses semantic-primary search topped up with lexical results to fill the result set.
+  </Step>
+  <Step title="Add business context and persona">
+    Fill in the system prompt with your business name, tone, and any standing instructions — for example, the products you sell, languages you support, or topics to avoid. This context is injected into every draft and auto-reply.
+  </Step>
+  <Step title="Test the key">
+    Click **Test key** to verify the provider accepts the credentials before saving. The test makes a minimal API call and reports success or a specific error (invalid key, quota exceeded, wrong model, etc.).
+  </Step>
+  <Step title="Enable the assistant and optionally the auto-reply bot">
+    Toggle the **assistant** switch on to make the ✨ draft button available in the inbox. Separately toggle **auto-reply** on to allow the bot to respond automatically to unassigned inbound messages that no Flow consumed. Set the per-conversation cap to the maximum number of automated replies you want per thread (default: 3).
+  </Step>
+</Steps>
+
+## Knowledge base
+
+The knowledge base lets you ground every AI response in your own content instead of relying purely on the model's training data.
+
+### Adding documents
+
+Go to **AI Agents → Setup → Knowledge base** and click **Add document**. Paste or type the content — FAQs, a return policy, pricing tables, product descriptions, anything the model should be able to cite. Each document is stored as a row in `ai_knowledge_documents` and chunked for retrieval.
+
+### Hybrid retrieval
+
+Wacrm uses two retrieval strategies in tandem:
+
+| Strategy | When it runs | What it needs |
+|---|---|---|
+| Postgres full-text search | Always, for every account | Nothing extra |
+| Semantic pgvector search | Only when an embeddings key is set | OpenAI embeddings key + migration 030 |
+
+When an embeddings key is present, semantic search runs first and the result set is topped up with lexical matches to reach the configured result count. When no embeddings key is set, only full-text search runs — this is a perfectly usable default for most knowledge bases.
+
+### Reindex
+
+If you add an embeddings key after documents are already saved, click **Reindex** to backfill vector embeddings for all existing documents. New documents added after the key is present are indexed automatically at save time.
+
+### Migration required
+
+The knowledge base requires the `pgvector` extension and the knowledge-base tables:
+
+```bash
+# Apply against your Supabase project
+supabase db push supabase/migrations/030_ai_knowledge.sql
+```
+
+This migration enables `CREATE EXTENSION IF NOT EXISTS vector`, creates the `ai_knowledge_documents` and `ai_knowledge_chunks` tables, and adds an `embeddings_api_key` column to `ai_configs`. Supabase projects have pgvector available by default.
+
+## Auto-reply bot settings
+
+### Per-conversation cap
+
+The `auto_reply_max_per_conversation` setting (default: **3**) limits how many automated replies the bot sends per conversation. Once the cap is reached the bot goes silent on that thread, leaving it for a human agent. The cap resets if an agent manually re-enables auto-reply on the conversation.
+
+### Human handoff
+
+The bot is instructed to hand off gracefully in two situations:
+
+- The knowledge base does not contain relevant information to answer the contact's question confidently.
+- The contact explicitly asks to speak with a human.
+
+In either case the bot stays silent and does not send a reply. It will not auto-reply on that thread again until a human agent re-enables it — preventing the bot from flooding a contact who needs real help with more automated responses.
+
+### Flows always win
+
+If a [Flow](/features/flows) handles an inbound message, the auto-reply bot does not run on that message. The priority order is: **Flows → Automations → AI auto-reply bot**. This means you can have a Flow for structured onboarding and the AI bot for everything else without the two systems conflicting.
+
+## Playground
+
+The playground at **AI Agents → Playground** (or `POST /api/ai/playground`) is a stateless test-chat interface. Each turn you send the running transcript; the server runs knowledge retrieval and calls your provider, then returns the reply.
+
+<Note>
+  The playground runs the exact same code path as the live auto-reply bot — the same knowledge-base retrieval, the same system prompt, and the same provider. What you see in the playground is precisely what a real customer will see. The playground works even when the master auto-reply switch is off, so you can tune and test before going live.
+</Note>
+
+## Security
+
+| Concern | How Wacrm handles it |
+|---|---|
+| API key storage | AES-256-GCM encrypted at rest using `ENCRYPTION_KEY`. The plaintext key is never returned to any client after saving — `GET /api/ai/config` returns only a `has_key: true/false` flag. |
+| Embeddings key storage | Encrypted with the same mechanism as the main API key; similarly never returned after saving. |
+| Key rotation | Changing `ENCRYPTION_KEY` orphans all previously encrypted keys. Users must re-enter their keys after a rotation. |
+
+## Environment tuning
+
+These variables are optional — safe defaults are in place. Set them in `.env.local` only if you need to override the defaults.
+
+```bash
+# Per-call timeout for provider requests, in milliseconds. Default: 30000.
+AI_REQUEST_TIMEOUT_MS=30000
+
+# How many recent messages to send to the model as context. Default: 20.
+AI_CONTEXT_MESSAGE_LIMIT=20
+```
+
+`AI_REQUEST_TIMEOUT_MS` applies to every call to the AI provider — drafts, auto-replies, playground, and the key test. Increase it if you use a slow or high-latency model and see timeout errors in the server logs.
+
+`AI_CONTEXT_MESSAGE_LIMIT` controls how many of the most recent text messages are included as conversation history. Larger values give the model more context but increase token usage and latency on every call.
+
+## Supported providers
+
+| Provider | API used | Embeddings |
+|---|---|---|
+| OpenAI | Chat Completions | `text-embedding-3-small` (optional) |
+| Anthropic | Messages API | Not supported (use OpenAI embeddings key for semantic search) |
+
+The model field is free-text — point it at any model your key can access. There are no hard-coded model names in the engine.

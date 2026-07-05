@@ -1,23 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "Wacrm",
+  "projectType": "saas",
+  "projectName": "Wacrm",
+  "projectDescription": "A self-hostable, forkable CRM template for WhatsApp Business — shared inbox, contacts, sales pipelines, broadcasts, no-code automations, and an AI reply assistant built on Next.js and Supabase.",
   "theme": "luma",
-  "colors": {
-    "primary": "#7f40ec",
-    "light": "#c49cf4"
-  },
-  "favicon": "https://media.brand.dev/d6e6e55a-4fb1-43ad-bd37-41a67ab0029b.png",
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/ArnasDon/wacrm"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/ArnasDon/wacrm"
-    }
-  },
+  "primaryColor": "#7f40ec",
+  "lightColor": "#c49cf4",
+  "darkColor": null,
   "navigation": {
     "tabs": [
       {
@@ -93,5 +81,37 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "Shared WhatsApp Business inbox with multi-agent assignment",
+    "Contact management with tags, custom fields, and CSV import",
+    "Sales pipelines (Kanban) linked to conversations",
+    "Template broadcasts with delivery and read tracking",
+    "No-code visual automation builder (triggers, conditions, waits, webhooks)",
+    "Programmable WhatsApp Flows with button/list interactive nodes",
+    "AI reply assistant (OpenAI/Anthropic BYOK) with knowledge base and auto-reply bot",
+    "Team accounts with role-based access (owner/admin/agent/viewer)",
+    "Public REST API (/api/v1) with scoped, revocable API keys",
+    "Outbound event webhooks with HMAC-SHA256 signature verification",
+    "Real-time dashboard with response times, volume, and pipeline value",
+    "AES-256-GCM token encryption, RLS on every table, HMAC-verified webhooks"
+  ],
+  "publicApiSurface": [
+    "GET /api/v1/me",
+    "POST /api/v1/messages",
+    "GET /api/v1/contacts",
+    "POST /api/v1/contacts",
+    "GET /api/v1/contacts/{id}",
+    "PATCH /api/v1/contacts/{id}",
+    "GET /api/v1/conversations",
+    "GET /api/v1/conversations/{id}",
+    "GET /api/v1/conversations/{id}/messages",
+    "POST /api/v1/broadcasts",
+    "GET /api/v1/broadcasts/{id}",
+    "POST /api/v1/webhooks",
+    "GET /api/v1/webhooks",
+    "GET /api/v1/webhooks/{id}",
+    "PATCH /api/v1/webhooks/{id}",
+    "DELETE /api/v1/webhooks/{id}"
+  ]
 }

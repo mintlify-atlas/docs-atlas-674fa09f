@@ -1,0 +1,60 @@
+---
+title: "Wacrm Public REST API Reference"
+sidebarTitle: "Overview"
+description: "The Wacrm /api/v1 REST API lets you send messages, manage contacts, query conversations, launch broadcasts, and register webhooks programmatically."
+---
+
+The Wacrm public REST API gives you programmatic access to everything your dashboard can do — send WhatsApp messages, manage contacts, read conversations, launch broadcast campaigns, and register outbound webhooks — all from your own scripts and automations. Every endpoint lives under the stable base path `/api/v1` and speaks a consistent JSON envelope so you can write a single response-handling layer for your integration.
+
+## Available Endpoints
+
+| Method | Path | Scope | Description |
+|--------|------|-------|-------------|
+| `GET` | `/api/v1/me` | *(none)* | Verify key and get account / scopes |
+| `POST` | `/api/v1/messages` | `messages:send` | Send a WhatsApp message |
+| `GET` | `/api/v1/contacts` | `contacts:read` | List contacts |
+| `POST` | `/api/v1/contacts` | `contacts:write` | Create or find a contact |
+| `GET` | `/api/v1/contacts/{id}` | `contacts:read` | Get one contact |
+| `PATCH` | `/api/v1/contacts/{id}` | `contacts:write` | Update a contact |
+| `GET` | `/api/v1/conversations` | `conversations:read` | List conversations |
+| `GET` | `/api/v1/conversations/{id}` | `conversations:read` | Get one conversation |
+| `GET` | `/api/v1/conversations/{id}/messages` | `messages:read` | List conversation messages |
+| `POST` | `/api/v1/broadcasts` | `broadcasts:send` | Launch a broadcast |
+| `GET` | `/api/v1/broadcasts/{id}` | `broadcasts:send` | Get broadcast status |
+| `POST` | `/api/v1/webhooks` | `webhooks:manage` | Register a webhook endpoint |
+| `GET` | `/api/v1/webhooks` | `webhooks:manage` | List webhook endpoints |
+| `GET` | `/api/v1/webhooks/{id}` | `webhooks:manage` | Get one endpoint |
+| `PATCH` | `/api/v1/webhooks/{id}` | `webhooks:manage` | Update an endpoint |
+| `DELETE` | `/api/v1/webhooks/{id}` | `webhooks:manage` | Delete an endpoint |
+
+## Explore by Endpoint Group
+
+<CardGroup cols={2}>
+  <Card title="Messages" icon="message" href="/api/messages">
+    Send text, media, and template messages to any WhatsApp number. The endpoint finds or creates the contact and conversation automatically.
+  </Card>
+  <Card title="Contacts & Conversations" icon="address-book" href="/api/contacts">
+    List, create, and update contacts. Read conversations and their full message history with cursor-paginated list endpoints.
+  </Card>
+  <Card title="Broadcasts" icon="bullhorn" href="/api/broadcasts">
+    Launch template campaigns to up to 1 000 recipients per request. Sends fan out in the background — poll the status endpoint for progress.
+  </Card>
+  <Card title="Webhooks" icon="webhook" href="/api/webhooks">
+    Register HTTPS endpoints to receive real-time event deliveries for inbound messages, delivery-status changes, and new conversations.
+  </Card>
+</CardGroup>
+
+## Rate Limits
+
+Requests are limited **per API key** at **120 requests per minute**. When the limit is exceeded the API returns `429 rate_limited`. The following headers are present on every `429` response and tell you exactly when to retry:
+
+| Header | Value |
+|--------|-------|
+| `Retry-After` | Seconds until the current window resets |
+| `X-RateLimit-Limit` | Total requests allowed per window |
+| `X-RateLimit-Remaining` | Requests remaining in the current window |
+| `X-RateLimit-Reset` | Unix timestamp (seconds) when the window resets |
+
+<Note>
+  The rate limiter is **in-memory and per-process**. A single-instance self-hosted deploy (the common case) works correctly out of the box. If you scale Wacrm to multiple processes or containers, the limit is enforced independently per process and is therefore under-counted across the fleet. For accurate multi-instance enforcement, swap the limiter for a shared store such as Redis or Upstash — see the comment at the top of `src/lib/rate-limit.ts` for guidance.
+</Note>

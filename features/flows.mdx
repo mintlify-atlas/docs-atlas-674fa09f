@@ -1,0 +1,126 @@
+---
+title: "Interactive WhatsApp Flows"
+sidebarTitle: "Flows"
+description: "Design programmable WhatsApp conversations with buttons, lists, variables, and conditional routing. Flows run on inbound messages and guide contacts through multi-step interactions."
+---
+
+Flows are interactive conversational menus that run inside WhatsApp and guide a contact through a multi-step dialogue — presenting buttons, collecting free-text replies, branching on variables, and optionally handing off to a human agent. Unlike [Automations](/features/automations), which are silent background workflows that execute a fixed step list, Flows maintain live state for each contact and wait for their responses before advancing. When a Flow is handling a conversation, it takes priority over the AI auto-reply bot and over automations — nothing else runs on that message until the Flow finishes or hands off.
+
+## Node types
+
+A Flow is a directed graph of nodes connected by edges. Each node has a `node_type` that determines what it does and what configuration it requires. The runner advances through nodes automatically after send nodes land, or waits for the contact's next reply on interactive and input nodes.
+
+<CardGroup cols={2}>
+  <Card title="start" icon="play">
+    The entry point of every Flow. Holds a single `next_node_key` pointing at the first real node. Every Flow has exactly one `start` node; the runner enters here on trigger.
+  </Card>
+  <Card title="send_message" icon="message">
+    Sends a plain text message to the contact. Supports `{{vars.X}}` variable interpolation in the message body. Auto-advances to `next_node_key` after the message lands at Meta — no contact reply required.
+  </Card>
+  <Card title="send_buttons" icon="table-list">
+    Sends a message with up to 3 tappable reply buttons. Each button has a `reply_id` (used for routing), a visible `title` (≤ 20 characters per Meta's limit), and its own `next_node_key`. The runner routes to the button's target node when the contact taps it.
+  </Card>
+  <Card title="send_list" icon="list">
+    Sends a tap-to-expand list message with sections and rows. Each row has a `reply_id`, `title`, optional `description`, and `next_node_key`. Supports optional `header_text`, `footer_text`, and a configurable `button_label` for the expand affordance.
+  </Card>
+  <Card title="send_media" icon="photo-film">
+    Sends an image, video, or document. The file is uploaded to the `flow-media` Supabase Storage bucket via the builder's file picker; `media_url` is the public URL Meta fetches at send time. Supports an optional `caption` (with `{{vars.X}}` interpolation) and, for documents, an optional `filename`. Auto-advances after send.
+  </Card>
+  <Card title="collect_input" icon="keyboard">
+    Sends a prompt message to the contact and waits for their free-text reply. The reply is stored into `flow_runs.vars` under the configured `var_key`, then the run advances to `next_node_key`. Downstream nodes can reference the captured value via `{{vars.var_key}}`.
+  </Card>
+  <Card title="condition" icon="code-branch">
+    Branches without sending a message. Evaluates a predicate over a stored variable (`var`), the contact's tags (`tag`), or a contact profile field (`contact_field`). Routes to `true_next` when the predicate passes, or `false_next` when it doesn't. Supported operators: `equals`, `contains`, `present`, `absent`.
+  </Card>
+  <Card title="set_tag" icon="tag">
+    Adds or removes a tag on the contact (controlled by `mode: "add" | "remove"`). The tag is selected from your existing tags in the builder. Auto-advances to `next_node_key` after the tag operation completes.
+  </Card>
+  <Card title="handoff" icon="user-headset">
+    Terminates the Flow run with a `handed_off` status and optionally assigns the conversation to a specific agent. An internal `note` can be written to the run events log for context. After handoff the contact is free to start a new Flow or receive messages from an agent.
+  </Card>
+  <Card title="end" icon="flag-checkered">
+    Terminal node — stops the run cleanly with a `completed` status. Carries no configuration. Every path through a Flow must terminate at either an `end` or a `handoff` node.
+  </Card>
+</CardGroup>
+
+## Variable interpolation
+
+Any `send_message`, `send_media` caption, or `collect_input` prompt can embed the value of a captured variable using the `{{vars.X}}` syntax, where `X` is the `var_key` set by an upstream `collect_input` node.
+
+```
+Hello {{vars.name}}, thanks for your order number {{vars.order_id}}!
+```
+
+Variables are stored per-run in `flow_runs.vars` and are scoped to the current run only — they do not persist between separate Flow runs for the same contact.
+
+## Triggers
+
+Flows start when an inbound message matches the Flow's configured trigger. The runner checks all active Flows in your account against every inbound message.
+
+| Trigger type | When it fires |
+|---|---|
+| `keyword` | The inbound message contains (or exactly matches) one of the configured keywords. Case-sensitive matching is optional. |
+| `first_inbound_message` | The contact is sending their very first message to your number. |
+| `manual` | The Flow is started manually from the conversation view — it does not fire automatically on inbound messages. |
+
+Only one Flow can be active for a contact at a time. If a contact already has an active run, the runner advances that run rather than starting a new one.
+
+## Fallback policy
+
+When a contact sends a reply that does not match any button or list row in a `send_buttons` or `send_list` node, the runner applies the Flow's fallback policy:
+
+| Setting | Options |
+|---|---|
+| `on_unknown_reply` | `reprompt` — re-send the prompt; `handoff` — hand off to a human; `ignore` — discard and wait |
+| `max_reprompts` | Number of reprompt attempts before `on_exhaust` applies (default: 2) |
+| `on_timeout_hours` | Hours before a stale run is swept as `timed_out` (default: 24) |
+| `on_exhaust` | `handoff` or `end` — what to do once `max_reprompts` is reached |
+
+The default policy is: reprompt up to 2 times, then hand off, and time out stale runs after 24 hours.
+
+## Building a Flow
+
+<Steps>
+  <Step title="Create a new Flow">
+    Go to **Flows** in the sidebar and click **New flow**. The dialog gives you the option to start blank or clone one of the pre-built templates (Welcome menu, FAQ bot, Lead capture).
+  </Step>
+  <Step title="Add nodes on the canvas">
+    The builder uses a node canvas powered by [@xyflow/react](https://reactflow.dev). Click **Add node** to insert a node of any type. Each node opens an inline config form where you set the message text, button labels, variable keys, and routing targets.
+  </Step>
+  <Step title="Connect nodes with edges">
+    Every routing target (`next_node_key`, per-button `next_node_key`, `true_next`, `false_next`) is expressed as the stable string `node_key` of the destination node — not a UUID — so Flows can be cloned or templated without rewriting references. The builder's visual canvas wires these as edges between node cards.
+  </Step>
+  <Step title="Validate">
+    The live validator runs at save time and catches missing edges, orphaned nodes, or nodes with no route to `end`/`handoff`. Validation issues are clickable: clicking a warning jumps to and highlights the offending node.
+  </Step>
+  <Step title="Activate">
+    Set the Flow status to **Active**. The runner immediately begins matching the Flow's trigger against new inbound messages.
+  </Step>
+</Steps>
+
+<Note>
+  Meta enforces hard limits on interactive message types: **button messages are capped at 3 buttons**, and **list messages are capped at 10 rows total** across all sections. The Wacrm validator and the Meta API layer both enforce these limits — exceeding them at save time produces a validation error; exceeding them at send time returns a Meta API error in the run events log.
+</Note>
+
+## Flow run history
+
+Every execution of a Flow is recorded as a `flow_run` row, and every step the runner takes is written as a `flow_run_event`. To inspect the execution history for a specific Flow:
+
+1. Open **Flows** in the sidebar.
+2. Click the Flow you want to inspect.
+3. Select the **Runs** tab — or navigate directly to `/flows/[id]/runs`.
+
+Each run entry shows the contact, the start and end timestamps, the final status (`completed`, `handed_off`, `timed_out`, `paused_by_agent`, or `failed`), and a step-by-step event log including which node was active at each point.
+
+## Relationship to Automations and the AI bot
+
+Flows always take priority over both Automations and the AI auto-reply bot. The inbound webhook checks active Flows first:
+
+- If a Flow **consumes** the message (either by advancing an existing active run or starting a new one), Automations do not fire on that message and the AI bot does not run.
+- Only if no Flow handles the message does the automation engine evaluate its triggers, followed by the AI bot for any remaining unassigned messages.
+
+This priority ordering means you can run Flows and Automations side by side without the two systems interfering with each other — a contact mid-flow will not receive an out-of-office auto-reply from an Automation at the same time.
+
+<Tip>
+  The stale-run sweep at `GET /api/flows/cron` clears abandoned runs once their `on_timeout_hours` threshold passes. It reuses the same `AUTOMATION_CRON_SECRET` as the automations cron — a single pinger hitting both endpoints keeps both systems healthy.
+</Tip>

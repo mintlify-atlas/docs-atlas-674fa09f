@@ -1,0 +1,72 @@
+---
+title: "Team Members and Role-Based Access"
+sidebarTitle: "Members & Roles"
+description: "Invite teammates by link, assign roles, and manage your Wacrm team. Four roles control access: owner, admin, agent, and viewer."
+---
+
+Wacrm is built for teams. Every install is account-scoped from day one — a single WhatsApp number can be staffed by your entire team, with each person getting exactly the level of access they need. Roles are enforced in both the TypeScript API layer and Supabase Row Level Security, so the same policy governs every code path.
+
+## Roles
+
+Wacrm defines four roles, ordered from least to most privileged. The hierarchy is mirrored between TypeScript (`src/lib/auth/roles.ts`) and the `account_role_enum` Postgres type (migration `017_account_sharing.sql`), so application guards and database policies always agree.
+
+| Role | Can do |
+|---|---|
+| `owner` | Full access to everything. One owner per account. Can transfer ownership to another member. Can manage all members including admins. |
+| `admin` | Everything except transfer ownership. Can invite new members, remove members, and change any member's role (except owner). Can edit account-wide settings: WhatsApp config, templates, pipelines, tags, custom fields. |
+| `agent` | Operational access. Can use the shared inbox, send messages, manage contacts and deals, create and edit automations, launch broadcasts, and build flows. Cannot edit account settings. |
+| `viewer` | Read-only access across all modules. Cannot send messages, create contacts, or modify any data. |
+
+<Note>
+  Role checks are a single source of truth — predicates like `canManageMembers`, `canEditSettings`, and `canSendMessages` in `src/lib/auth/roles.ts` are called by both API route guards and UI gates, so adding or changing a capability is always a one-file diff.
+</Note>
+
+## Inviting teammates
+
+<Steps>
+  <Step title="Open the invite dialog">
+    Go to **Settings → Members** and click **Invite**. You need at least the `admin` role to create invitations.
+  </Step>
+  <Step title="Set the role and label">
+    Choose the role you want to assign to the new member (`admin`, `agent`, or `viewer` — you cannot invite someone directly as `owner`). Optionally add a label (up to 80 characters) to identify what the invite is for.
+  </Step>
+  <Step title="Copy the invite link">
+    Wacrm generates a time-limited invite URL and shows it to you exactly once. Copy it immediately — the plaintext token is never stored, only a SHA-256 hash is persisted. Share the link via WhatsApp, Slack, or email.
+  </Step>
+  <Step title="Teammate redeems the link">
+    The invited person opens the link in a browser. They sign up or log in, then Wacrm joins them to your account with the assigned role. Their previous personal account (created automatically on signup) is cleaned up.
+  </Step>
+</Steps>
+
+<Note>
+  Invite links expire. If a teammate tries to open an expired link, they will see an error. Simply create a new invitation from **Settings → Members** and share the new URL.
+</Note>
+
+## Changing a member's role
+
+Admins and owners can change the role of any member except the owner. Go to **Settings → Members**, find the member in the list, and select the new role from their role dropdown. The change takes effect immediately — the member's next request will be evaluated against the new role.
+
+## Removing members
+
+Admins and owners can remove any member except the owner. Go to **Settings → Members**, open the member's menu, and click **Remove**. Removing a member revokes their access to the account immediately but does not delete any data they created (contacts, conversations, notes, etc. remain).
+
+## Transferring ownership
+
+Ownership transfer is an owner-only action. Go to **Settings → Members**, open the menu next to the member you want to make the new owner, and choose **Transfer ownership**. The current owner is demoted to `admin` and the selected member becomes the new `owner`. This action cannot be undone except by the new owner performing another transfer.
+
+## `ALLOWED_INVITE_HOSTS` environment variable
+
+When `NEXT_PUBLIC_SITE_URL` is set, invite links always point to that URL and no further configuration is needed. If it is unset, Wacrm derives the base URL from the incoming request's `Host` / `X-Forwarded-Host` header — which is reliable behind standard reverse proxies (Hostinger, Vercel, Cloudflare) because the proxy overwrites those headers with the canonical hostname.
+
+On a bare deployment exposed directly to the internet, a malicious caller could POST to the invite endpoint with a crafted `Host: phishing.example` header and receive a link pointing at their own site. `ALLOWED_INVITE_HOSTS` is the belt-and-suspenders guard for this case:
+
+```bash
+# .env.local
+ALLOWED_INVITE_HOSTS=crm.example.com,crm-staging.example.com
+```
+
+Set it to a comma-separated list of hostnames (no scheme, no port). Any request whose derived hostname is not on the list falls back to the `wacrm.tech` domain and logs a warning to the console. Most operators don't need this — setting `NEXT_PUBLIC_SITE_URL` already pins invite links to the correct URL.
+
+<Note>
+  **Solo installs:** if you are the only person using your Wacrm instance, you can skip team setup entirely. You are automatically the `owner` of your account and have full access to every feature. There is nothing to configure — invite teammates only when you are ready.
+</Note>

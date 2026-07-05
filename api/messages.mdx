@@ -1,0 +1,161 @@
+---
+title: "Messages API — Send WhatsApp Messages"
+sidebarTitle: "Messages"
+description: "POST /api/v1/messages — Send text, template, or media messages to any E.164 phone number. Requires messages:send scope."
+---
+
+The Messages API is the primary way to send WhatsApp messages from your own scripts and automations. Rather than working with internal conversation IDs, you pass an E.164 phone number and Wacrm handles everything else — looking up or creating the contact and conversation before dispatching the message through the WhatsApp Business API.
+
+## `POST /api/v1/messages`
+
+**Required scope:** `messages:send`
+
+Sends a WhatsApp message to any E.164 phone number. The endpoint finds or creates the contact and conversation associated with that number and then runs the send. Because contact and conversation resolution is part of the request, a single call is enough for any automation — no separate contact-creation step is needed.
+
+### Request body
+
+<ParamField body="to" type="string" required>
+  The recipient's phone number in E.164 format (e.g. `+14155550123`). This is the only required field. The endpoint resolves or creates the contact and conversation automatically.
+</ParamField>
+
+<ParamField body="type" type="string" default="text">
+  The message type. One of: `text`, `template`, `image`, `video`, `document`, `audio`. Defaults to `text` when omitted.
+</ParamField>
+
+<ParamField body="text" type="string">
+  The message body for `type: text`, or the caption for media types (`image`, `video`, `document`, `audio`). Required when `type` is `text`.
+</ParamField>
+
+<ParamField body="media_url" type="string">
+  A publicly accessible URL for the media file. Required when `type` is `image`, `video`, `document`, or `audio`.
+</ParamField>
+
+<ParamField body="filename" type="string">
+  An optional display filename for `type: document` (e.g. `invoice.pdf`). Ignored for other types.
+</ParamField>
+
+<ParamField body="template" type="object">
+  Required when `type` is `template`. Describes the approved WhatsApp template to send.
+
+  <Expandable title="template fields">
+    <ParamField body="template.name" type="string" required>
+      The approved template name as it appears in Meta Business Manager (e.g. `order_update`).
+    </ParamField>
+
+    <ParamField body="template.language" type="string" required>
+      The BCP-47 language code of the template variant to use (e.g. `en_US`).
+    </ParamField>
+
+    <ParamField body="template.params" type="string[] | object">
+      Variable substitutions for the template body. Pass an **array of strings** for positional body variables, or a **structured object** (with `header`, `body`, `buttons` keys) for templates that require named or button parameters.
+
+      ```jsonc
+      // positional
+      "params": ["Jane", "Order #A123"]
+
+      // structured
+      "params": {
+        "body": ["Jane"],
+        "buttons": [{ "type": "url", "index": 0, "text": "Track" }]
+      }
+      ```
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="reply_to_message_id" type="string">
+  The UUID of a message in the same conversation to reply to. The referenced message must belong to the resolved conversation or the request will be rejected.
+</ParamField>
+
+<ParamField body="name" type="string">
+  An optional display name to set when a **new** contact is created for the given phone number. Has no effect when the contact already exists.
+</ParamField>
+
+### Examples
+
+**Sending a plain text message:**
+
+```bash
+curl -X POST https://your-crm.example.com/api/v1/messages \
+  -H "Authorization: Bearer wacrm_live_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{ "to": "+14155550123", "type": "text", "text": "Hi 👋" }'
+```
+
+**Sending a template message with positional parameters:**
+
+```jsonc
+{
+  "to": "+14155550123",
+  "type": "template",
+  "template": {
+    "name": "order_update",
+    "language": "en_US",
+    "params": ["A123"]
+  },
+  "reply_to_message_id": "<uuid>"
+}
+```
+
+```bash
+curl -X POST https://your-crm.example.com/api/v1/messages \
+  -H "Authorization: Bearer wacrm_live_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "to": "+14155550123",
+        "type": "template",
+        "template": {
+          "name": "order_update",
+          "language": "en_US",
+          "params": ["A123"]
+        }
+      }'
+```
+
+### Response (201)
+
+```json
+{
+  "data": {
+    "message_id": "a1b2c3d4-…",
+    "whatsapp_message_id": "wamid.…",
+    "conversation_id": "e5f6g7h8-…",
+    "contact_id": "i9j0k1l2-…",
+    "contact_created": true
+  }
+}
+```
+
+<ResponseField name="message_id" type="string">
+  The internal UUID of the created message row.
+</ResponseField>
+
+<ResponseField name="whatsapp_message_id" type="string">
+  The `wamid.*` identifier returned by the WhatsApp Business API. Use this to correlate delivery status webhooks.
+</ResponseField>
+
+<ResponseField name="conversation_id" type="string">
+  The UUID of the conversation the message was sent in (found or created).
+</ResponseField>
+
+<ResponseField name="contact_id" type="string">
+  The UUID of the contact associated with the given phone number (found or created).
+</ResponseField>
+
+<ResponseField name="contact_created" type="boolean">
+  `true` when a new contact record was created for the number; `false` when an existing contact was matched.
+</ResponseField>
+
+### Domain error codes
+
+Beyond the [standard error codes](/api/pagination-and-errors), the Messages API may return:
+
+| HTTP | `code`                    | Meaning                                                                                           |
+| ---- | ------------------------- | ------------------------------------------------------------------------------------------------- |
+| 400  | `whatsapp_not_configured` | No WhatsApp Business integration is connected to this account.                                    |
+| 502  | `meta_error`              | The request reached Meta's servers but was rejected — check your template approval and phone number. |
+| 500  | `template_malformed`      | The template payload could not be serialized into a valid API request.                            |
+
+<Tip>
+  The `contact_created` field lets you detect when a send implicitly created a new contact — useful for auditing or triggering a follow-up workflow on first contact.
+</Tip>

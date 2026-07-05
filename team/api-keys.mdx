@@ -1,0 +1,73 @@
+---
+title: "API Keys and Scopes"
+sidebarTitle: "API Keys"
+description: "Create scoped, revocable API keys in Wacrm to authenticate programmatic access. Admins and owners can manage keys under Settings → API keys."
+---
+
+Wacrm's public REST API (`/api/v1`) is authenticated with API keys — account-scoped bearer tokens you create in the dashboard. Keys are designed for machine callers: scripts, n8n or Zapier automations, scheduled jobs, or any integration that needs to read or drive the CRM without a user session. Each key carries a set of scopes that precisely control what it can do, and any key can be revoked without affecting others.
+
+## How keys work
+
+A key is an account-scoped secret. When you create one, Wacrm generates a random plaintext string, computes its SHA-256 hash, and stores only the hash. The plaintext is returned to you exactly once — at creation time. Wacrm can never show it again. If you lose it, the only option is to revoke the key and create a new one.
+
+Every API request authenticates by passing the key in the `Authorization` header:
+
+```http
+Authorization: Bearer wacrm_live_a1b2c3d4…
+```
+
+The `key_prefix` (e.g. `wacrm_live_a1b2c3d4`) is a short, non-secret display string that lets the dashboard identify which key is which in the list without ever showing the full secret.
+
+## Creating a key
+
+<Steps>
+  <Step title="Open API keys">
+    Go to **Settings → API keys**. You need at least the `admin` role to create or revoke keys.
+  </Step>
+  <Step title="Click New API key">
+    Give the key a descriptive name (up to 80 characters) so you can identify it later — for example, `n8n production` or `nightly contact sync`.
+  </Step>
+  <Step title="Select scopes">
+    Choose only the scopes the integration actually needs. A key with no scopes can still call `GET /api/v1/me` to verify that it works, but cannot access any data.
+  </Step>
+  <Step title="Set an expiry (optional)">
+    You can set an expiry of up to 365 days. Leave it blank for a key that never expires.
+  </Step>
+  <Step title="Copy the key immediately">
+    Wacrm shows the full plaintext key once. Copy it now and store it somewhere safe (a password manager, a secrets manager, or your hosting provider's environment variable store). Once you close the dialog, the key cannot be recovered.
+  </Step>
+</Steps>
+
+<Warning>
+  The full API key is shown exactly once. Wacrm stores only a SHA-256 hash — not the plaintext. If you lose the key before saving it, revoke it from **Settings → API keys** and create a new one.
+</Warning>
+
+## Scopes
+
+Authorization is scopes-only. A key's capabilities are determined entirely by its scopes, independent of the role of the admin who created it. The table below lists every available scope.
+
+| Scope | Allows |
+|---|---|
+| `messages:send` | Send WhatsApp messages (text, template, and media) |
+| `messages:read` | Read messages and their delivery status |
+| `contacts:read` | List and read contacts |
+| `contacts:write` | Create and update contacts |
+| `conversations:read` | List and read conversations |
+| `broadcasts:send` | Launch broadcast campaigns |
+| `webhooks:manage` | Register and manage outbound event webhooks |
+
+A key with no scopes granted can only call `GET /api/v1/me`, which returns the account the key belongs to. This is useful for verifying that a key is valid and active before building an integration.
+
+<Tip>
+  Grant only the scopes each integration actually needs. If an `n8n` workflow only reads contacts, give its key `contacts:read` — not `contacts:write` or `messages:send`. Least-privilege keys limit blast radius if a secret is ever leaked.
+</Tip>
+
+## Revoking a key
+
+Go to **Settings → API keys**, find the key you want to disable, and click **Revoke**. Revocation is immediate — the key fails authentication on its next request. Revoked keys remain visible in the list as an audit trail (name, prefix, when it was created, and when it was revoked) but cannot be un-revoked. Create a new key if you need to replace it.
+
+## Who can manage keys
+
+Only `admin` and `owner` roles can create or revoke API keys. Any member (including `agent` and `viewer`) can view the key roster — the list of names, prefixes, scopes, and timestamps — because the roster is not sensitive. The key secret is never in the roster.
+
+For details on how to use a key in API requests, see [API Authentication](/api/authentication).

@@ -1,0 +1,69 @@
+---
+title: "Database Migrations and Schema Updates"
+sidebarTitle: "Migrations"
+description: "Wacrm uses 30 numbered SQL migrations in supabase/migrations/. Apply them in order when setting up or upgrading your instance."
+---
+
+Wacrm's database schema is managed through plain SQL migration files in `supabase/migrations/`. There are 30 files, numbered `001` through `030`. Every new install applies all 30 in order; upgrades apply only the files added since the last deploy. Each file is idempotent where possible — re-running a migration that has already been applied is safe.
+
+## Applying migrations
+
+<Steps>
+  <Step title="Via Supabase CLI (recommended)">
+    The Supabase CLI tracks which migrations have already been applied and pushes only the new ones:
+
+    ```bash
+    supabase db push
+    ```
+
+    Run this from the root of the repository after pulling the latest changes. The CLI connects to the Supabase project specified in your `supabase/config.toml` (or the `SUPABASE_DB_URL` environment variable).
+  </Step>
+  <Step title="Via Supabase Dashboard">
+    Open your Supabase project, go to **SQL Editor**, paste the contents of each new migration file, and run them one at a time in numeric order. This is the manual fallback if you do not have the CLI installed.
+  </Step>
+</Steps>
+
+## Migration reference
+
+| File | What it adds |
+|---|---|
+| `001_initial_schema` | Core tables: `profiles`, `contacts`, `conversations`, `messages`, `tags`, `whatsapp_config` |
+| `002_pipelines_enhancements` | Pipeline and deal schema enhancements |
+| `003_broadcast_recipient_wamid` | `wamid` column on broadcast recipients for delivery tracking |
+| `004_contact_delete_set_null` | Cascade behavior for contact deletion (set null on related rows) |
+| `005_broadcast_counts_incremental` | Incremental delivery and read count columns on broadcasts |
+| `006_automations` | `automations`, `automation_steps`, `automation_logs`, and `automation_pending_executions` tables |
+| `007_automations_increment_counter` | Counter columns on automations for run tracking |
+| `008_profile_avatars_storage` | Supabase Storage bucket for profile avatars |
+| `009_message_actions` | Message reaction and action tables |
+| `010_flows` | `flows`, `flow_nodes`, `flow_runs`, and `flow_run_events` tables |
+| `011_profile_beta_features` | `beta_features` column on profiles for feature flags |
+| `012_flows_increment_counter` | Run counter column on flows |
+| `013_whatsapp_config_phone_number_id_unique` | Unique constraint on `phone_number_id` in `whatsapp_config` |
+| `014_message_templates_meta_integration` | `message_templates` table for Meta-approved templates |
+| `015_whatsapp_config_registration` | Registration state columns on `whatsapp_config` |
+| `016_flow_media` | Media node support in flows |
+| `017_account_sharing` | `accounts` table, `account_invitations` table, `account_role_enum` type, `account_id` columns on all domain tables, RLS rewrite, new signup trigger |
+| `018_account_member_rpcs` | Postgres RPC functions for member management (role changes, removal) |
+| `019_invitation_rpcs` | Postgres RPC functions for invite link creation and redemption |
+| `020_account_sharing_followups` | Followup fixes and cleanup to the account sharing schema |
+| `021_account_default_currency` | Default currency column on `accounts` |
+| `022_contact_phone_dedup` | `phone_normalized` unique index for contact deduplication |
+| `023_chat_media` | Supabase Storage bucket for chat media (images, audio, documents) |
+| `024_member_presence` | `member_presence` table for online indicators in the inbox |
+| `025_filter_contacts_by_tags` | Indexes supporting tag-based contact filtering |
+| `026_api_keys` | `api_keys` table with hash-only storage and scopes array; RLS policies |
+| `027_notifications` | `notifications` table, RLS policies, Realtime publication, and `notify_conversation_assigned` trigger |
+| `028_webhook_endpoints` | `webhook_endpoints` table for outbound event webhooks |
+| `029_ai_reply` | `ai_configs` table and `auto_reply` columns on `conversations` |
+| `030_ai_knowledge` | `ai_knowledge_documents`, `ai_knowledge_chunks`, and pgvector extension for semantic search |
+
+## Upgrading from an older version
+
+When you pull a new release, check `CHANGELOG.md` for **"Migration required"** notes. Each such note names the exact migration file to apply. Only apply the migrations that are new since your last deploy — do not re-run migrations you have already applied.
+
+For example, upgrading from 0.4.0 to 0.5.0 requires `029_ai_reply.sql`; upgrading from 0.5.0 to 0.6.0 requires `030_ai_knowledge.sql`. The version entries in `CHANGELOG.md` always call out the specific file.
+
+<Warning>
+  Migration `030_ai_knowledge.sql` enables the `pgvector` extension (`CREATE EXTENSION IF NOT EXISTS vector`). Supabase projects have pgvector available but it must be activated by running the migration — it is not on by default. If your Supabase plan does not support pgvector, the AI knowledge base semantic search feature will not be available, but the rest of Wacrm will continue to work normally.
+</Warning>

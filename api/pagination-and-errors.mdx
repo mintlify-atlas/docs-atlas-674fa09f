@@ -1,0 +1,92 @@
+---
+title: "Pagination, Errors, and Response Format"
+sidebarTitle: "Pagination & Errors"
+description: "Every Wacrm API list endpoint uses keyset cursor pagination. Error responses follow a consistent envelope with stable error codes."
+---
+
+Every response from the Wacrm public API uses one of two consistent JSON envelopes — a `data` wrapper on success and an `error` object on failure. List endpoints extend the success envelope with a `meta` block that carries the cursor for the next page. Understanding these shapes lets you write a single response-handling layer for your entire integration.
+
+## Response Envelope
+
+**Success** responses wrap the payload in a `data` key:
+
+```json
+{ "data": { } }
+```
+
+**Failure** responses use an `error` object with a machine-readable `code` and a human-readable `message`:
+
+```json
+{
+  "error": {
+    "code": "forbidden",
+    "message": "This API key is missing the 'messages:send' scope"
+  }
+}
+```
+
+Always branch on `error.code` in your code — it is a stable, versioned string. The `error.message` field is intended for humans and its wording may change between releases without notice.
+
+## Error Codes
+
+| HTTP Status | `code` | Meaning |
+|-------------|--------|---------|
+| `401` | `unauthorized` | Missing, malformed, unknown, revoked, or expired API key |
+| `403` | `forbidden` | Valid key, but it is missing the required scope for this endpoint |
+| `429` | `rate_limited` | Per-key rate limit exceeded (120 req/min) |
+| `400` | `bad_request` | Malformed or invalid request body / parameters |
+| `404` | `not_found` | Resource does not exist or belongs to a different account |
+| `500` | `internal` | Unexpected server error |
+
+## Pagination
+
+All list endpoints in the Wacrm API use **keyset cursor pagination**. Rows are ordered by `(created_at, id)` descending and the cursor encodes the last row seen. This approach is stable under concurrent inserts — an offset-based scheme would skip or repeat rows when new data arrives mid-scan — and remains fast at any page depth.
+
+### Parameters and Response Shape
+
+| Parameter | Description |
+|-----------|-------------|
+| `?limit=` | Number of results per page. Default: `50`. Maximum: `100`. |
+| `?cursor=` | Opaque cursor string from the previous page's `meta.next_cursor`. Omit on the first request. |
+
+Every list response includes a `meta` block alongside `data`:
+
+```json
+{
+  "data": [ ],
+  "meta": {
+    "next_cursor": "eyJ..."
+  }
+}
+```
+
+When `next_cursor` is `null`, you have reached the last page.
+
+### Pagination Example
+
+Fetch the first page, then follow the cursor until `next_cursor` is `null`:
+
+```
+GET /api/v1/contacts?limit=50
+→ { "data": [...], "meta": { "next_cursor": "eyJ..." } }
+
+GET /api/v1/contacts?limit=50&cursor=eyJ...
+→ { "data": [...], "meta": { "next_cursor": null } }
+```
+
+<Note>
+  Treat the cursor as an **opaque string**. Do not attempt to parse or construct cursors manually — pass the value from `meta.next_cursor` back verbatim as the `?cursor=` parameter on the next request. Wacrm validates the cursor on decode and will silently restart from page one if it is malformed.
+</Note>
+
+## Rate Limit Headers
+
+When a `429 rate_limited` response is returned, the following headers tell you exactly how long to wait before retrying:
+
+| Header | Value |
+|--------|-------|
+| `Retry-After` | Seconds until the current rate-limit window resets |
+| `X-RateLimit-Limit` | Total requests allowed per window (120) |
+| `X-RateLimit-Remaining` | Requests remaining in the current window |
+| `X-RateLimit-Reset` | Unix timestamp (seconds) at which the window resets |
+
+Respect the `Retry-After` value rather than retrying immediately — requests made before the window resets will continue to return `429` and will not count toward the next window's budget.

@@ -1,0 +1,57 @@
+---
+title: "Wacrm: Self-Hostable WhatsApp CRM Template"
+sidebarTitle: "Introduction"
+description: "Wacrm is an MIT-licensed, forkable CRM template for WhatsApp Business. Own your data, skip seat fees, and deploy in an afternoon."
+---
+
+Wacrm is an open-source CRM template built on Next.js 16 and Supabase, designed for businesses and developers who want a full-featured WhatsApp Business inbox without the cost or lock-in of a hosted SaaS product. The model is simple: fork the repository, connect your own Supabase project and Meta Cloud API credentials, and deploy to any Node.js host. Your code, your database, your domain — and complete freedom to extend, rebrand, or redesign every part of it.
+
+## What you get
+
+<CardGroup cols={2}>
+  <Card title="Shared Inbox" icon="inbox">
+    Official WhatsApp Business API inbox for multiple agents on one number. Includes per-conversation assignment, status tracking, notes, emoji reactions, and reply-with-quote — all updating in real time.
+  </Card>
+  <Card title="Contacts" icon="address-book">
+    Full contact management with tags, custom fields, CSV import, and automatic deduplication. Phone numbers are normalised and enforced unique per account so every write path agrees.
+  </Card>
+  <Card title="Pipelines" icon="chart-kanban">
+    Kanban-style sales pipelines with deals linked directly to conversations. Configurable default currency per account; pipeline value and stage totals surface on the real-time dashboard.
+  </Card>
+  <Card title="Broadcasts" icon="bullhorn">
+    Send Meta-approved message templates to a recipient list with per-recipient variable substitution, delivery tracking, and read-receipt reporting.
+  </Card>
+  <Card title="Automations" icon="bolt">
+    No-code automation engine with triggers on inbound messages, new contacts, keywords, or a cron schedule. Supports conditional branches, wait steps, tag actions, and outbound webhooks — all built in a visual editor.
+  </Card>
+  <Card title="Flows" icon="diagram-project">
+    Branching, button-driven WhatsApp conversation builder. Build welcome menus, FAQ bots, and lead-capture sequences from a no-code editor. Flows always take priority over the auto-reply bot.
+  </Card>
+  <Card title="AI Agents" icon="robot">
+    Bring-your-own OpenAI or Anthropic key. One-click AI-drafted replies in the inbox, an optional auto-reply bot with a per-conversation cap and human handoff, and a knowledge base with hybrid Postgres full-text and pgvector semantic retrieval. Keys are stored AES-256-GCM-encrypted — no per-seat AI fee, your data stays yours.
+  </Card>
+  <Card title="Public REST API" icon="code">
+    A scoped, revocable API key system at `/api/v1`. Send messages, manage contacts and conversations, launch broadcasts, and receive real-time outbound event webhooks — all authenticated with `Authorization: Bearer` and rate-limited per key.
+  </Card>
+</CardGroup>
+
+## Why fork this?
+
+Forking Wacrm rather than subscribing to a hosted CRM gives you four things no SaaS vendor can offer:
+
+- **Full ownership.** Your Supabase project holds the data. Your domain serves the app. No seat pricing, no vendor trust dance, no risk of a product sunset.
+- **Full customisation.** The stack is deliberately boring — Next.js, Supabase, Tailwind — so the learning curve is short. Add the fields your team needs, remove the modules you don't, or redesign the UI entirely. Upstream changes can be merged back into your fork selectively.
+- **Zero ops to start.** Hostinger Managed Node.js deploys a fork in a few clicks with no Docker, no Kubernetes, and no infra team. Git-push deploys, free SSL, and a global CDN are included.
+- **Real security primitives.** WhatsApp tokens and AI provider keys are encrypted at rest with AES-256-GCM. Row-level security is enforced on every Supabase table. Inbound webhooks are HMAC-SHA256 verified against your Meta App Secret. A strict Content Security Policy and per-endpoint rate limiting are on by default.
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| **App** | Next.js 16 (App Router), React 19, TypeScript, Tailwind v4 |
+| **Data** | Supabase — Postgres, Auth, Storage, and Row-Level Security |
+| **Messaging** | Meta Cloud API (official WhatsApp Business API) |
+
+<Note>
+  Wacrm is a **template**, not a collaborative product. The expected workflow is fork → customise → deploy, not upstream contribution. Your fork is meant to diverge; that divergence is the point. Bug reports and security issues are welcome against the upstream template — new features belong in your fork.
+</Note>

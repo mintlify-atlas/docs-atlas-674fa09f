@@ -1,0 +1,89 @@
+---
+title: "Shared WhatsApp Inbox for Teams"
+sidebarTitle: "Inbox"
+description: "Manage all inbound and outbound WhatsApp messages from a single shared inbox. Assign conversations to agents, set statuses, and add internal notes."
+---
+
+The Wacrm inbox gives your entire team a single, shared view of every WhatsApp conversation on your account's number. Multiple agents work the same thread list simultaneously — real-time updates propagate instantly via Supabase Realtime, so what one agent sees is never stale. Whether you are a solo operator or a team of ten, the inbox scales without you ever needing more than one WhatsApp Business number.
+
+## How the inbox works
+
+When a customer messages your WhatsApp number, a `Conversation` record is created (or re-opened) in Supabase and the message appears immediately in every connected agent's inbox. The three-column layout consists of:
+
+- **Conversation list** (left) — sortable, filterable list of all conversations with live unread badge counts and last-message previews.
+- **Message thread** (centre) — the full message history for the selected conversation with a compose bar for outbound replies.
+- **Contact sidebar** (right, desktop only) — linked contact details, tags, deals, and notes. Agents can toggle the panel open or closed; the preference is persisted per device in `localStorage`.
+
+On mobile the layout collapses to a single pane: the list or the thread, with a back button to return to the list. Deep-linking via `?c=<conversationId>` is supported so sharing a specific thread link with a colleague opens the correct conversation directly.
+
+## Key capabilities
+
+<CardGroup cols={2}>
+  <Card title="Conversation assignment" icon="user-check">
+    Any conversation can be assigned to a specific agent from the thread header. The `assigned_agent_id` field on the `Conversation` record is updated immediately, and the assignee receives a `conversation_assigned` notification. Unassigned conversations are visible to all agents.
+  </Card>
+  <Card title="Status management" icon="circle-half-stroke">
+    Every conversation carries one of three statuses: **open**, **pending**, or **closed**. Agents change the status from a dropdown in the thread header. Closed conversations are hidden from the default list view but remain searchable and re-openable.
+  </Card>
+  <Card title="Internal notes" icon="note-sticky">
+    Agents can leave private notes on a conversation that are visible only to the team — customers never see them. Notes are distinct from regular messages and are rendered with a distinct visual style in the thread.
+  </Card>
+  <Card title="Media support" icon="photo-film">
+    The inbox renders inbound and outbound images, video, audio (including Opus recordings), and documents inline in the thread. Outbound media is sent by providing a publicly accessible URL; the server forwards it to the Meta Cloud API.
+  </Card>
+  <Card title="Reaction support" icon="face-smile">
+    Customers can react to messages with emoji, and those reactions are reflected in the thread in real time via the `MessageReaction` records stored in Supabase. Both customer and agent reactions are tracked with `actor_type: 'customer' | 'agent'`.
+  </Card>
+  <Card title="Real-time presence" icon="wifi">
+    The inbox subscribes to a Supabase Realtime channel (`inbox-realtime`) on mount. An offline/reconnect banner appears when the WebSocket drops, and the inbox automatically resyncs missed events on reconnect and on tab visibility change.
+  </Card>
+</CardGroup>
+
+## Conversation lifecycle
+
+Conversations move through a defined set of statuses that reflect where a customer is in your support or sales flow.
+
+<Steps>
+  <Step title="Open">
+    The default state. A conversation is **open** when it has been created by an inbound message or by a business-initiated template send, and has not yet been resolved. All open conversations appear in the default inbox view. Agents reply, assign, and add notes while a conversation is open.
+  </Step>
+  <Step title="Pending">
+    Mark a conversation **pending** when you are waiting on the customer's response or an external action before you can resolve it. Pending conversations stay visible in the list but are visually differentiated from open ones. Automations can also transition conversations to pending (e.g. after sending a follow-up template).
+  </Step>
+  <Step title="Closed">
+    Marking a conversation **closed** signals it has been resolved. The 24-hour customer service window resets when a customer messages a closed conversation again — Wacrm automatically re-opens it and moves it to the top of the list. The `close_conversation` automation step can also close conversations programmatically.
+  </Step>
+</Steps>
+
+## Supported message types
+
+The `Message` record's `content_type` field reflects the type of each message. The following content types are supported for both inbound and outbound messages:
+
+| `content_type` | Description |
+|---|---|
+| `text` | Plain text message body. |
+| `template` | Meta-approved template message with optional header, body variables, and buttons. |
+| `image` | JPEG or PNG image, with optional caption. |
+| `video` | MP4 video file. |
+| `document` | PDF or other document, rendered with filename. |
+| `audio` | Audio clip, including Opus voice recordings from the WhatsApp app. |
+| `interactive` | Button or list reply — rendered with a "↩ button reply" affordance. The `interactive_reply_id` field carries the stable button ID used by the Flows engine. |
+| `location` | GPS co-ordinates sent by the customer. |
+
+Outbound messages support `text`, `template`, `image`, `video`, `document`, and `audio` via the send endpoint at `POST /api/whatsapp/send`.
+
+<Note>
+  **AI-drafted replies:** Agents with the appropriate role can click the ✨ button in the compose bar to generate an AI-drafted reply based on the conversation context. If a knowledge base is configured, the assistant answers from your own content. See [AI Agents](/features/ai-agents) for setup details.
+</Note>
+
+## Role requirements
+
+Access to the inbox and the actions available within it are governed by the account role assigned to each team member.
+
+| Role | Inbox access |
+|---|---|
+| **Owner / Admin** | Full access — reply, assign, change status, add notes, delete messages. |
+| **Agent** | Can read all conversations, send replies (text and template), assign conversations, change status, and add internal notes. |
+| **Viewer** | Read-only access — can browse conversations and read messages but cannot reply, assign, or change status. |
+
+Role checks are enforced both in the UI (gated buttons) and server-side on every API call via `hasMinRole` from `@/lib/auth/roles`.

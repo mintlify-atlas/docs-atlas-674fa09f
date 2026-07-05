@@ -1,0 +1,63 @@
+---
+title: "Wacrm Architecture Overview"
+sidebarTitle: "Architecture"
+description: "How Wacrm is structured: Next.js App Router for the frontend and API routes, Supabase for data and auth, and the Meta Cloud API for WhatsApp messaging."
+---
+
+Wacrm is a single Next.js application backed by Supabase and the Meta Cloud API. The stack is intentionally boring — widely understood, well-documented, and deployable on a single managed Node.js host with no Kubernetes or custom infrastructure. This page explains how the pieces fit together and where the important security boundaries are.
+
+## Stack overview
+
+<CardGroup cols={2}>
+  <Card title="App layer" icon="layer-group">
+    **Next.js 16** with App Router. React Server Components handle data fetching and initial render; Client Components provide real-time UI (inbox, notifications, presence). TypeScript throughout. Tailwind v4 for styling.
+  </Card>
+  <Card title="Data layer" icon="database">
+    **Supabase** — Postgres with Row Level Security on every table; Supabase Auth (email/password); Supabase Storage (avatars, chat media); Supabase Realtime (WebSocket subscriptions for the inbox, notifications, and online presence).
+  </Card>
+  <Card title="WhatsApp layer" icon="whatsapp">
+    **Meta Cloud API** — the official WhatsApp Business API. Inbound messages and delivery status callbacks arrive at the webhook endpoint. Outbound messages are sent via Meta's messages API from server-side routes.
+  </Card>
+  <Card title="AI layer" icon="sparkles">
+    **Direct provider API calls** — OpenAI Chat Completions and Anthropic Messages, called from server-side routes only. Each account brings its own key (stored AES-256-GCM-encrypted in Supabase). No global provider key env var is required.
+  </Card>
+</CardGroup>
+
+## Key internal routes
+
+These routes are not part of the public API — they are called by the Meta webhook delivery system, by internal cron jobs, or by the application itself.
+
+| Route | Purpose |
+|---|---|
+| `POST /api/whatsapp/webhook` | Receives inbound WhatsApp messages and delivery status updates from Meta. Every POST is HMAC-SHA256 verified against `META_APP_SECRET` before any processing happens. |
+| `GET /api/whatsapp/webhook` | Meta webhook verification handshake (one-time setup). |
+| `POST /api/automations/engine` | Processes automation trigger evaluation and step execution. Called internally when a triggering event occurs. |
+| `GET /api/automations/cron` | Drains pending Wait steps whose delay has elapsed. Must be called by an external scheduler on a regular interval — see [Automations](/features/automations) for cron setup. |
+| `GET /api/flows/cron` | Flow cron processing for time-based flow nodes. |
+| `GET /api/v1/*` and `POST /api/v1/*` | Public REST API endpoints, authenticated with API keys. |
+
+## Security model
+
+Wacrm layers several independent security controls so that a failure in one does not compromise the system.
+
+**Token encryption.** WhatsApp access tokens and AI provider keys are encrypted with AES-256-GCM before being stored in Supabase. The encryption key is `ENCRYPTION_KEY` — a 64-character hex string (32 bytes). Rotating this value orphans all previously encrypted tokens; users must re-save their keys in Settings after a rotation.
+
+**Webhook verification.** Every inbound POST to `/api/whatsapp/webhook` carries an `X-Hub-Signature-256` header set by Meta. The handler verifies the HMAC-SHA256 signature against the raw request body using `META_APP_SECRET` and rejects any request that does not match. This prevents spoofed webhook deliveries.
+
+**Row Level Security.** Every Supabase table has RLS enabled. The `is_account_member(account_id, min_role)` SQL function is the single gatekeeper — every policy calls it, so no row can escape its account boundary regardless of how it is queried. The function is `SECURITY DEFINER` so policy evaluation never triggers recursive RLS on the `profiles` table.
+
+**API key auth.** Public API keys are stored as SHA-256 hashes. Authentication lookups use the Supabase service-role client (which bypasses RLS, since an API caller has no user session) to find the key by hash, then verify it is not revoked or expired. The service-role key is never exposed to client-side code.
+
+**Rate limiting.** The default in-memory rate limiter enforces 120 requests per minute per API key. The limiter uses a fixed-window counter stored in a Node.js `Map`.
+
+<Note>
+  The in-memory rate limiter is per-process. On a single-instance deployment (the typical Hostinger or Vercel setup) this works correctly. For multi-instance deployments — multiple Hostinger nodes, Vercel serverless fan-out, or any horizontally scaled setup — the in-process `Map` is not shared across instances, so the effective limit is multiplied by the number of instances. Swap the `check` implementation in `src/lib/rate-limit.ts` for a shared store (Redis, Upstash, or Cloudflare Durable Objects) without changing any call sites.
+</Note>
+
+**CSP headers.** `next.config.ts` configures `Content-Security-Policy-Report-Only`, HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Permissions-Policy` on every response. The CSP currently ships in report-only mode — flip the header key to `Content-Security-Policy` once you have confirmed no legitimate requests are being flagged in your browser console.
+
+## Deployment model
+
+Wacrm runs as a single Next.js process. It is stateless — no in-process state is required between requests (except the rate-limiter `Map`, which is advisory). All persistence lives in Supabase. This means the application can be horizontally scaled by running multiple instances pointed at the same Supabase project, with the caveat noted above for the rate limiter.
+
+The recommended deployment is a single **Hostinger Managed Node.js** instance. This covers the vast majority of team sizes and keeps operations simple — no load balancer, no container orchestration, no Redis to manage.

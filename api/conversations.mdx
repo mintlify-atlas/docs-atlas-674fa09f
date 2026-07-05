@@ -1,0 +1,155 @@
+---
+title: "Conversations API — List and Read Conversations"
+sidebarTitle: "Conversations"
+description: "GET /api/v1/conversations and /api/v1/conversations/{id}/messages — read conversations and their messages. Requires conversations:read and messages:read scopes."
+---
+
+The Conversations API provides read access to the conversation threads in your Wacrm inbox. Each conversation represents an ongoing or historical exchange with a contact over WhatsApp. You can list conversations with optional status and contact filters, read individual threads, and page through the messages within them — all without touching the dashboard.
+
+## `GET /api/v1/conversations`
+
+**Required scope:** `conversations:read`
+
+Returns a paginated list of conversations ordered newest first. Each conversation embeds its associated contact record along with the contact's full tag set, giving you everything you need in a single request. See [Pagination and Errors](/api/pagination-and-errors) for cursor mechanics and the `?limit=` parameter.
+
+### Query parameters
+
+| Parameter    | Type   | Description                                                                                       |
+| ------------ | ------ | ------------------------------------------------------------------------------------------------- |
+| `status`     | string | Filter by conversation status: `open`, `pending`, or `closed`.                                   |
+| `contact_id` | string | Filter to conversations belonging to a specific contact UUID.                                     |
+| `limit`      | number | Page size; default `50`, max `100`.                                                               |
+| `cursor`     | string | Opaque cursor from the previous page's `meta.next_cursor`. Omit for the first page.              |
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "conv-uuid-…",
+      "status": "open",
+      "created_at": "2026-06-01T10:00:00.000Z",
+      "updated_at": "2026-07-01T15:45:00.000Z",
+      "contact": {
+        "id": "contact-uuid-…",
+        "phone": "+14155550123",
+        "name": "Jane Doe",
+        "email": null,
+        "company": "Acme",
+        "avatar_url": null,
+        "tags": [
+          { "id": "tag-uuid-…", "name": "vip", "color": "#3b82f6" }
+        ]
+      }
+    }
+  ],
+  "meta": { "next_cursor": "eyJ…" }
+}
+```
+
+<ResponseField name="data" type="Conversation[]">
+  Array of conversation objects for the current page.
+
+  <Expandable title="Conversation object fields">
+    <ResponseField name="id" type="string">UUID of the conversation.</ResponseField>
+    <ResponseField name="status" type="string">Current status: `open`, `pending`, or `closed`.</ResponseField>
+    <ResponseField name="created_at" type="string">ISO 8601 creation timestamp.</ResponseField>
+    <ResponseField name="updated_at" type="string">ISO 8601 last-updated timestamp.</ResponseField>
+    <ResponseField name="contact" type="object">
+      The embedded contact associated with this conversation, including their full `tags` array.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta.next_cursor" type="string | null">
+  Opaque cursor for the next page. `null` indicates the last page.
+</ResponseField>
+
+---
+
+## `GET /api/v1/conversations/{id}`
+
+**Required scope:** `conversations:read`
+
+Returns a single conversation by its UUID, including the embedded contact and tags. Returns `404` if the conversation does not exist or belongs to a different account.
+
+```bash
+curl https://your-crm.example.com/api/v1/conversations/conv-uuid-… \
+  -H "Authorization: Bearer wacrm_live_xxx"
+```
+
+---
+
+## `GET /api/v1/conversations/{id}/messages`
+
+**Required scope:** `messages:read`
+
+Returns a paginated list of messages within a conversation, ordered **newest first**. Before any message is returned, the conversation is verified to belong to your account — a foreign or unknown conversation ID returns `404`.
+
+### Query parameters
+
+| Parameter | Type   | Description                                                                             |
+| --------- | ------ | --------------------------------------------------------------------------------------- |
+| `limit`   | number | Page size; default `50`, max `100`.                                                     |
+| `cursor`  | string | Opaque cursor from the previous page's `meta.next_cursor`. Omit for the first page.    |
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "msg-uuid-…",
+      "conversation_id": "conv-uuid-…",
+      "direction": "inbound",
+      "status": "received",
+      "whatsapp_message_id": "wamid.…",
+      "content_type": "text",
+      "content_text": "Hey, I have a question about my order.",
+      "content_media_url": null,
+      "content_filename": null,
+      "created_at": "2026-07-01T12:00:00.000Z"
+    }
+  ],
+  "meta": { "next_cursor": null }
+}
+```
+
+<ResponseField name="id" type="string">Internal UUID of the message.</ResponseField>
+
+<ResponseField name="conversation_id" type="string">UUID of the parent conversation.</ResponseField>
+
+<ResponseField name="direction" type="string">
+  `inbound` for messages sent by the contact to you; `outbound` for messages you or Wacrm sent to the contact.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Delivery state of the message. Outbound messages move through states such as `sent`, `delivered`, and `read` as Meta delivery webhooks arrive. Inbound messages are `received`.
+</ResponseField>
+
+<ResponseField name="whatsapp_message_id" type="string | null">
+  The `wamid.*` identifier from the WhatsApp Business API. Present on all inbound messages and on outbound messages that were successfully dispatched.
+</ResponseField>
+
+<ResponseField name="content_type" type="string">
+  The message content type: `text`, `image`, `video`, `document`, `audio`, `template`, or `unsupported`.
+</ResponseField>
+
+<ResponseField name="content_text" type="string | null">
+  The text body for `text` messages, or the caption for media messages. `null` for types with no text content.
+</ResponseField>
+
+<ResponseField name="content_media_url" type="string | null">
+  URL of the media attachment for media-type messages. `null` for non-media messages.
+</ResponseField>
+
+<ResponseField name="content_filename" type="string | null">
+  Original filename for `document` messages. `null` for other types.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">ISO 8601 timestamp when the message was stored in Wacrm.</ResponseField>
+
+<Note>
+  Messages are returned newest first. To display a conversation chronologically in your UI, reverse the array after fetching, or accumulate pages and display in reverse-fetch order.
+</Note>

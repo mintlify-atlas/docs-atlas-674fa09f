@@ -1,0 +1,85 @@
+---
+title: "Environment Variables Reference for Wacrm"
+sidebarTitle: "Environment Variables"
+description: "Complete reference for every environment variable Wacrm reads — required, recommended, and optional — with generation commands and security notes."
+---
+
+Wacrm reads all configuration from environment variables. In local development these live in `.env.local` (copied from `.env.local.example`). In production, set them in your hosting provider's environment panel — never commit secrets to your repository. Variables prefixed with `NEXT_PUBLIC_` are embedded in the client bundle at build time; all others are server-only.
+
+<Warning>
+  Never commit `.env.local` to version control. Never reference `SUPABASE_SERVICE_ROLE_KEY` in any client-side code — it bypasses Row-Level Security entirely and must only be used in server-side routes. If you accidentally expose it, rotate the key immediately from the Supabase dashboard under Project Settings → API.
+</Warning>
+
+## Required
+
+The app will not start without these variables. Set all five before running `npm run dev` or deploying to production.
+
+<ParamField query="NEXT_PUBLIC_SUPABASE_URL" type="string" required>
+  The URL of your Supabase project. Found in the Supabase dashboard under **Project Settings → API**. Takes the form `https://<project-ref>.supabase.co`. Embedded in the client bundle at build time.
+</ParamField>
+
+<ParamField query="NEXT_PUBLIC_SUPABASE_ANON_KEY" type="string" required>
+  The Supabase anon (public) key for your project. Found alongside `NEXT_PUBLIC_SUPABASE_URL` in **Project Settings → API**. Safe to expose to the browser; Row-Level Security on your database is the actual access control layer. Embedded in the client bundle at build time.
+</ParamField>
+
+<ParamField query="SUPABASE_SERVICE_ROLE_KEY" type="string" required>
+  The Supabase service role key. Bypasses Row-Level Security and is used exclusively by server-side routes — the WhatsApp webhook receiver, the automation engine, and the public API key auth path. Found in **Project Settings → API**. Keep this secret: never paste it into client code or return it from a server action.
+</ParamField>
+
+<ParamField query="ENCRYPTION_KEY" type="string" required>
+  A 64-character hex string (32 bytes) used as the key for AES-256-GCM encryption of WhatsApp access tokens and AI provider keys stored in the database. Generate a fresh value with:
+
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  ```
+
+  **Rotation warning:** changing this value after tokens have been encrypted orphans every existing token. Users will need to re-enter their WhatsApp and AI settings after a key rotation.
+</ParamField>
+
+<ParamField query="META_APP_SECRET" type="string" required>
+  Your Meta App Secret, found in the Meta for Developers console under **App Settings → Basic**. Used to verify the HMAC-SHA256 signature on every inbound webhook POST from Meta. Without this variable the webhook endpoint rejects every incoming request.
+</ParamField>
+
+## Recommended
+
+These variables have safe defaults or fallback behaviour, but you will want to set them for any publicly accessible deployment.
+
+<ParamField query="NEXT_PUBLIC_SITE_URL" type="string">
+  The canonical public URL of this deployment — scheme plus host with no trailing slash (e.g. `https://crm.example.com`). Used for the sitemap and OG image generation. Routes that produce self-referential URLs — such as invite links created by `/api/account/invitations` — derive the origin from the incoming request when this variable is unset, which works correctly on most proxied deployments. Set this variable when generating links from a cron job or background worker that has no incoming request to derive from.
+</ParamField>
+
+## Optional
+
+These variables are only needed if you use the specific feature they configure. Leave them unset and the feature either uses its documented default or is safely disabled.
+
+<ParamField query="ALLOWED_INVITE_HOSTS" type="string">
+  A comma-separated list of hostnames (no scheme, no port) that `/api/account/invitations` is permitted to include in generated invite URLs. Example: `crm.example.com,crm-staging.example.com`.
+
+  When unset, the invite URL hostname is derived from the incoming request's `Host` / `X-Forwarded-Host` header — trustworthy on most proxied deployments but potentially spoofable on bare internet-facing servers. Setting this variable rejects any derived hostname not on the list as a defence-in-depth measure. Most operators do not need this: setting `NEXT_PUBLIC_SITE_URL` already pins invite links to your canonical URL.
+</ParamField>
+
+<ParamField query="AUTOMATION_CRON_SECRET" type="string">
+  A shared secret that protects the `GET /api/automations/cron` endpoint. Required if you use **Wait steps** in Automations or the **stale-run sweep** in Flows — a scheduled job must call this endpoint to drain pending executions and time out abandoned flow runs. Generate any long random string, for example:
+
+  ```bash
+  openssl rand -hex 32
+  ```
+
+  The cron endpoint performs a constant-time comparison (`crypto.timingSafeEqual`) on this value to prevent timing side-channel attacks.
+</ParamField>
+
+<ParamField query="META_APP_ID" type="string">
+  Your Meta App ID, found in **App Settings → Basic** in the Meta for Developers console. Required only when submitting message templates with an **image header**: Meta requires a Resumable-Upload media handle (not a plain URL) as the header sample, and that upload is app-scoped. Without this variable, image-header template submission returns a clear error. Text-only and body-only templates are unaffected. Pair with `META_APP_SECRET`.
+</ParamField>
+
+<ParamField query="WHATSAPP_TEMPLATES_DRY_RUN" type="string">
+  Set to `true` to skip the real Meta API call when submitting message templates. The template row is stored in the database with a synthetic `dry-run-<uuid>` meta template ID. Intended for CI pipelines and local development where you want to exercise the full template submission UI without a live WhatsApp Business Account. Leave unset or set to `false` in production.
+</ParamField>
+
+<ParamField query="AI_REQUEST_TIMEOUT_MS" type="string">
+  Per-call timeout in milliseconds for requests to AI providers (OpenAI, Anthropic). Applies to both the draft-reply endpoint (`POST /api/ai/draft`) and the auto-reply bot. **Default: `30000`** (30 seconds).
+</ParamField>
+
+<ParamField query="AI_CONTEXT_MESSAGE_LIMIT" type="string">
+  The number of recent text messages from a conversation to include as context when calling the AI model for drafts and auto-replies. Higher values give the model more conversational history at the cost of a larger prompt. **Default: `20`**.
+</ParamField>

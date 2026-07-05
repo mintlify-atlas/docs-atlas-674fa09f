@@ -1,0 +1,162 @@
+---
+title: "Troubleshooting Common Wacrm Issues"
+sidebarTitle: "Troubleshooting"
+description: "Diagnose and fix the most common Wacrm deployment issues: webhook failures, missing messages, migration errors, and authentication problems."
+---
+
+Most Wacrm deployment problems fall into a small number of categories: webhook misconfiguration, Supabase connectivity or RLS issues, migration gaps, and missing or incorrect environment variables. Work through the accordion items below that match your symptom. If your issue is not listed, check the application logs in your hosting panel (Hostinger hPanel → Logs, or Vercel → Functions → Logs) for the first error that appears.
+
+<Accordion title="Webhook not receiving messages">
+  Meta sends inbound messages and delivery status updates to your webhook URL over HTTPS. If messages are not appearing, check each of the following in order:
+
+  **1. Verify `META_APP_SECRET` is set correctly.**
+  Every inbound POST from Meta carries an `X-Hub-Signature-256` header. Wacrm rejects any request whose signature does not match. An incorrect or missing `META_APP_SECRET` causes every webhook delivery to return `403 Forbidden`, and Meta will eventually disable the webhook endpoint. Copy the value from **Meta for Developers → App Settings → Basic → App secret** and paste it into your environment variables.
+
+  **2. Confirm the webhook URL is publicly reachable over HTTPS.**
+  Meta requires a valid TLS certificate. `localhost` or self-signed certificates will not work. Use your production URL (e.g. `https://crm.example.com/api/whatsapp/webhook`) and test it with:
+
+  ```bash
+  curl -I https://crm.example.com/api/whatsapp/webhook
+  ```
+
+  You should get a `200` or `405` — anything else means the URL is not reachable.
+
+  **3. Check that Meta shows the webhook as verified.**
+  In **Meta for Developers → WhatsApp → Configuration → Webhook**, the status should be **Verified**. If it is not, use the **Edit** button to re-trigger verification. Verification calls `GET /api/whatsapp/webhook` with a `hub.challenge` parameter; the route responds with the challenge value if `META_APP_SECRET` and the verify token match.
+
+  **4. Check your hosting logs for 4xx/5xx responses.**
+  Hostinger hPanel → Logs and Vercel Functions → Logs both show incoming request logs. Look for POST requests to `/api/whatsapp/webhook` and check their response codes.
+</Accordion>
+
+<Accordion title="Messages not appearing in the inbox">
+  Messages may arrive at the webhook and be written to the database, but not appear in the inbox UI due to Realtime or RLS issues.
+
+  **1. Check that Supabase Realtime is enabled on the `messages` table.**
+  Go to **Supabase Dashboard → Database → Replication** and verify the `messages` table is in the `supabase_realtime` publication. If it is not, run:
+
+  ```sql
+  ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+  ```
+
+  **2. Verify RLS policies are not blocking the subscription.**
+  The inbox subscribes to `messages` via Supabase Realtime using the anon/user session. The `messages_select` RLS policy (applied in migration `017`) allows `SELECT` for any account member. If you have custom policies that restrict access more tightly, Realtime rows will be filtered out before delivery.
+
+  **3. Check the browser console for WebSocket errors.**
+  Open your browser's developer tools, go to the Console and Network tabs, and reload the inbox. Look for WebSocket connection errors (`wss://*.supabase.co`) or `401 Unauthorized` responses. A WebSocket error usually means `NEXT_PUBLIC_SUPABASE_URL` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` is incorrect or the Supabase project is paused (free-tier Supabase projects pause after inactivity).
+</Accordion>
+
+<Accordion title="Migration errors">
+  **Run migrations in numeric order.** Migrations have dependencies — `018` references tables created by `017`, and so on. Running them out of order will produce foreign key or column reference errors.
+
+  **Migration 030 requires pgvector.**
+  `030_ai_knowledge.sql` runs `CREATE EXTENSION IF NOT EXISTS vector`. This will fail if your Supabase plan does not have pgvector available, or if the extension was not previously enabled. Check **Supabase Dashboard → Database → Extensions** and search for `vector`. Enable it there first if it is not already on, then re-run the migration.
+
+  **Constraint violation errors.**
+  If a migration that adds a `NOT NULL` column or a `UNIQUE` index fails, it usually means there is existing data that violates the constraint. Check the SQL editor output for the specific constraint name and table, then inspect the offending rows before retrying.
+
+  **Re-running a migration is safe.**
+  All Wacrm migrations are written to be idempotent: tables use `CREATE TABLE IF NOT EXISTS`, indexes use `CREATE INDEX IF NOT EXISTS`, policies are dropped before recreate, and backfill steps check `IS NULL` before writing. You can paste any migration into the SQL editor and run it again without corrupting data.
+</Accordion>
+
+<Accordion title="AI key not working">
+  The AI reply assistant uses a per-account API key stored encrypted in Supabase (AES-256-GCM with `ENCRYPTION_KEY`). It is not a global environment variable.
+
+  **1. Test the key with the built-in tester.**
+  Go to **AI Agents → Setup**, enter your provider and key, and click **Test key**. This calls the provider directly with a minimal prompt and shows the raw error if it fails. The most common failures are an invalid key, wrong model name, or insufficient quota on the provider account.
+
+  **2. Check `AI_REQUEST_TIMEOUT_MS`.**
+  The default timeout is 30 seconds (`30000` ms). If your provider is slow or the model is large, the request may be timing out before a response arrives. Try increasing the value in your environment variables:
+
+  ```bash
+  AI_REQUEST_TIMEOUT_MS=60000
+  ```
+
+  **3. Verify the model name.**
+  The model is a free-text field. Typos produce `model not found` errors from the provider. Common values: `gpt-4o` or `gpt-4o-mini` (OpenAI), `claude-3-5-sonnet-20241022` (Anthropic). Check your provider's documentation for currently available model IDs.
+</Accordion>
+
+<Accordion title="Automations with Wait steps not firing">
+  Wait steps in automations are drained by an external cron job, not by the application itself. If your Wait steps never complete, the cron is almost certainly not configured.
+
+  **1. Set `AUTOMATION_CRON_SECRET`.**
+  Generate a long random string and set it as an environment variable:
+
+  ```bash
+  AUTOMATION_CRON_SECRET=$(openssl rand -hex 32)
+  ```
+
+  **2. Schedule the cron endpoint.**
+  Call `GET /api/automations/cron?secret=<your-secret>` on a regular schedule (every 1–5 minutes is typical). Use your hosting provider's cron scheduler, a free service like [cron-job.org](https://cron-job.org), or a Vercel Cron Job:
+
+  ```
+  GET https://crm.example.com/api/automations/cron?secret=<AUTOMATION_CRON_SECRET>
+  ```
+
+  Without this endpoint being called, pending Wait step executions accumulate in the `automation_pending_executions` table but are never processed.
+</Accordion>
+
+<Accordion title="Invite links not working">
+  **1. Check `NEXT_PUBLIC_SITE_URL`.**
+  Invite links are generated from the request's `Host` / `X-Forwarded-Host` header when `NEXT_PUBLIC_SITE_URL` is not set. On most reverse-proxied deployments (Hostinger, Vercel, Cloudflare) this resolves correctly to your domain. If links are pointing at the wrong host or falling back to `wacrm.tech`, set this variable explicitly:
+
+  ```bash
+  NEXT_PUBLIC_SITE_URL=https://crm.example.com
+  ```
+
+  **2. Check `ALLOWED_INVITE_HOSTS` if configured.**
+  If you have set `ALLOWED_INVITE_HOSTS`, every hostname that should appear in invite URLs must be in the comma-separated list. A hostname not on the list is rejected and the invite URL falls through to `wacrm.tech`:
+
+  ```bash
+  ALLOWED_INVITE_HOSTS=crm.example.com,crm-staging.example.com
+  ```
+
+  **3. Check that the invite has not expired.**
+  Invite links are time-limited. If the recipient sees an "invalid or expired" error, create a new invitation from **Settings → Members → Invite**.
+</Accordion>
+
+<Accordion title="ENCRYPTION_KEY rotation">
+  `ENCRYPTION_KEY` is used to AES-256-GCM encrypt WhatsApp access tokens and AI provider keys before storing them in Supabase. **Changing this value permanently breaks all tokens encrypted under the old key.**
+
+  After rotating `ENCRYPTION_KEY`:
+
+  1. Every account whose WhatsApp token was saved under the old key will fail to send messages. Users must go to **Settings → WhatsApp** and re-save their access token.
+  2. Every account whose AI provider key was saved under the old key will receive decryption errors. Users must go to **AI Agents → Setup** (or **Settings → AI Assistant**) and re-enter their key.
+
+  There is no automated re-encryption path. Plan key rotation during a maintenance window and notify all team members to re-save their keys afterward.
+
+  <Tip>
+    Store `ENCRYPTION_KEY` in your hosting provider's secret manager (Hostinger environment variables, Vercel environment variables) and never commit it to version control. Treat it with the same care as a private key.
+  </Tip>
+</Accordion>
+
+<Accordion title="Rate limiting in multi-instance deploys">
+  Wacrm's default rate limiter is in-memory — it stores counters in a Node.js `Map` inside the running process. On a single-instance deployment this enforces the limit correctly. On multi-instance deployments (multiple Hostinger nodes, Vercel serverless functions, any horizontally scaled setup), each process has its own independent `Map`, so the effective per-key limit is multiplied by the number of instances.
+
+  To enforce rate limits across instances, replace the `check` function implementation in `src/lib/rate-limit.ts` with a shared store. The function signature and return shape (`{ success, remaining, reset, limit }`) remain unchanged — call sites need no modification. Suitable backends include:
+
+  - **Upstash Redis** — serverless-friendly, works on Vercel Edge
+  - **Redis** (self-hosted or managed) — straightforward on a VPS
+  - **Cloudflare Durable Objects** — if deploying to Cloudflare Workers
+
+  The current implementation is documented with this trade-off in `src/lib/rate-limit.ts`.
+</Accordion>
+
+## Common environment variable mistakes
+
+<Steps>
+  <Step title="Missing META_APP_SECRET">
+    Without `META_APP_SECRET`, every inbound webhook POST is rejected with `403 Forbidden`. Wacrm logs `[webhook] missing META_APP_SECRET` to the console. Find the value under **Meta for Developers → App Settings → Basic → App secret**.
+  </Step>
+  <Step title="Wrong Supabase key type">
+    Wacrm uses two Supabase keys for different purposes. `NEXT_PUBLIC_SUPABASE_ANON_KEY` is the safe-to-expose key used for client-side and user-authenticated requests — it respects RLS. `SUPABASE_SERVICE_ROLE_KEY` bypasses RLS and is used only by server-side routes (the webhook, the automation engine, and the public API key auth path). Swapping them — particularly using the service-role key on the client side — either breaks RLS isolation or causes authentication errors. Copy each key from **Supabase Dashboard → Project Settings → API** and use the correct one for each variable.
+  </Step>
+  <Step title="ENCRYPTION_KEY is not 64 hex characters">
+    `ENCRYPTION_KEY` must be exactly 64 lowercase hexadecimal characters (32 bytes, which AES-256 requires). A common mistake is generating it as base64 or using fewer bytes. Generate a valid key with:
+
+    ```bash
+    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+    ```
+
+    If `ENCRYPTION_KEY` is the wrong length or format, Wacrm will throw a crypto error when attempting to encrypt or decrypt tokens.
+  </Step>
+</Steps>

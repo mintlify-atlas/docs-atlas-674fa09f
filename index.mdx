@@ -1,20 +1,77 @@
 ---
-title: "Introduction"
-description: "Welcome to your project"
+title: "Wacrm: Self-Hostable WhatsApp CRM"
+sidebarTitle: "Home"
+description: "Wacrm is a forkable CRM template for WhatsApp Business. Deploy your own shared inbox, contacts, pipelines, broadcasts, and AI assistant in an afternoon."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+Wacrm is a complete, production-ready CRM template built on Next.js and Supabase that turns WhatsApp Business into a team collaboration tool. Fork the repo, fill in your credentials, and deploy — you own every line of code, every row of data, and every dollar you save on SaaS seat fees.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Clone, configure, and run Wacrm locally in five minutes.
+  </Card>
+  <Card title="Environment Variables" icon="key" href="/environment-variables">
+    Every variable Wacrm reads, with explanations and defaults.
+  </Card>
+  <Card title="Supabase Setup" icon="database" href="/setup/supabase">
+    Create your project, run migrations, and configure RLS.
+  </Card>
+  <Card title="WhatsApp Setup" icon="whatsapp" href="/setup/whatsapp">
+    Connect the Meta Cloud API and register your webhook.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Drive your CRM programmatically with the public REST API.
+  </Card>
+  <Card title="Automations" icon="bolt" href="/features/automations">
+    Build no-code workflows that trigger on messages, contacts, and schedules.
+  </Card>
+</CardGroup>
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>
+## What's included
+
+Wacrm ships as a full-stack Next.js 16 application with these modules ready to use:
+
+<CardGroup cols={3}>
+  <Card title="Shared Inbox" icon="inbox" href="/features/inbox">
+    Multiple agents, one WhatsApp number. Assign, track status, and leave notes.
+  </Card>
+  <Card title="Contacts" icon="address-book" href="/features/contacts">
+    Tags, custom fields, CSV import, and deduplication by phone number.
+  </Card>
+  <Card title="Pipelines" icon="chart-kanban" href="/features/pipelines">
+    Kanban sales boards with deals linked to WhatsApp conversations.
+  </Card>
+  <Card title="Broadcasts" icon="bullhorn" href="/features/broadcasts">
+    Send approved templates to thousands of contacts with delivery tracking.
+  </Card>
+  <Card title="Flows" icon="diagram-project" href="/features/flows">
+    Interactive WhatsApp conversations with buttons, lists, and branching.
+  </Card>
+  <Card title="AI Agents" icon="sparkles" href="/features/ai-agents">
+    BYOK assistant (OpenAI/Anthropic) with knowledge base and auto-reply.
+  </Card>
+</CardGroup>
+
+## How it works
+
+<Steps>
+  <Step title="Fork and clone">
+    Fork [ArnasDon/wacrm](https://github.com/ArnasDon/wacrm) on GitHub, then clone your fork locally.
+  </Step>
+  <Step title="Configure credentials">
+    Copy `.env.local.example` to `.env.local` and fill in your Supabase URL, anon key, service role key, encryption key, and Meta app secret.
+  </Step>
+  <Step title="Run migrations">
+    Apply the 30 SQL migration files in `supabase/migrations/` against your Supabase project to create the full schema.
+  </Step>
+  <Step title="Connect WhatsApp">
+    Register your Meta Cloud API phone number, point the webhook at `/api/whatsapp/webhook`, and paste your token into the Settings page.
+  </Step>
+  <Step title="Deploy">
+    Push to Hostinger (recommended), Vercel, Railway, or any Node.js host. The app runs on standard `next start`.
+  </Step>
+</Steps>
+
+<Note>
+  Wacrm is a **template**, not a managed service. You own the code, the database, and the data. Forking is the expected flow — customise freely.
+</Note>

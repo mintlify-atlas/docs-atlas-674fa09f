@@ -1,0 +1,84 @@
+---
+title: "Sales Pipelines and Deal Tracking"
+sidebarTitle: "Pipelines"
+description: "Manage deals through a Kanban-style sales pipeline in Wacrm. Each deal links to a WhatsApp conversation for full context alongside every stage."
+---
+
+Wacrm's Pipelines feature brings a Kanban-style deal board directly into your WhatsApp CRM. Because every deal can be linked to a contact and a conversation, your sales team has the full message history alongside the deal — no tab-switching, no copy-pasting phone numbers into a separate CRM. Move deals through custom stages by dragging cards, and let automations advance them as conversations progress.
+
+## How pipelines work
+
+A **pipeline** is a named sequence of **stages**. Each stage is a column on the Kanban board. **Deals** are cards that live in a stage and represent an active sales opportunity.
+
+When you first open the Pipelines page, Wacrm seeds a default **Sales Pipeline** with five stages:
+
+| Stage | Color |
+|---|---|
+| New Lead | Blue |
+| Qualified | Yellow |
+| Proposal Sent | Orange |
+| Negotiation | Purple |
+| Won | Green |
+
+You can rename, reorder, and delete stages from **Pipeline Settings** (the gear icon in the pipeline header), and create entirely new pipelines from the **Add Pipeline** button. Each account can have multiple pipelines — for example, a separate pipeline for enterprise and SMB sales tracks.
+
+### Analytics
+
+Above the board, a summary row shows per-stage deal counts and total value, giving a quick health check without opening individual cards.
+
+## Deal fields
+
+Each deal record carries the following fields, sourced directly from the `Deal` type in `src/types/index.ts`:
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `string` | UUID primary key. |
+| `title` | `string` | Deal name displayed on the Kanban card. |
+| `value` | `number` | Monetary value of the deal. |
+| `currency` | `string?` | Currency code (e.g. `USD`). Defaults to the account-level currency set in migration 021. |
+| `status` | `'open' \| 'won' \| 'lost'` | Outcome status. Won/lost deals can be filtered separately from open ones. |
+| `pipeline_id` | `string` | The pipeline this deal belongs to. |
+| `stage_id` | `string` | The current stage. Updated on drag-and-drop. |
+| `contact_id` | `string \| null` | The linked contact. `null` if the contact was deleted after the deal was created (history preserved). |
+| `conversation_id` | `string?` | The linked WhatsApp conversation, if any. |
+| `assigned_to` | `string?` | The `user_id` of the agent responsible for this deal. |
+| `notes` | `string?` | Free-text notes visible on the deal card. |
+| `expected_close_date` | `string?` | ISO 8601 date for pipeline forecasting. |
+
+## Creating a pipeline
+
+<Steps>
+  <Step title="Open the Pipelines page">
+    Navigate to **Pipelines** in the sidebar. If no pipeline exists yet, Wacrm automatically seeds the default Sales Pipeline with five stages.
+  </Step>
+  <Step title="Add a new pipeline">
+    Click **Add Pipeline** (requires Admin or Owner role). Enter a name such as "Enterprise Sales" and confirm. The five default stages are created automatically — you can customise them immediately.
+  </Step>
+  <Step title="Customise stages">
+    Open **Pipeline Settings** (gear icon or the Manage Pipelines option in the pipeline selector dropdown) to rename stages, change their colors, reorder them by dragging, or delete stages that have no deals.
+  </Step>
+  <Step title="Add your first deal">
+    Click **Add Deal** in the top bar, or the **+** button at the bottom of any stage column. Fill in the title, value, linked contact, and any notes, then save. The deal card appears in the selected stage immediately.
+  </Step>
+</Steps>
+
+## Drag-and-drop stage transitions
+
+Move a deal to a different stage by dragging its card to the target column. The stage change is optimistically applied in the UI and persisted to Supabase in the background. If the server write fails, the card snaps back and a toast error is shown.
+
+## Linking deals to conversations
+
+Every deal can be associated with a specific WhatsApp conversation via the `conversation_id` field. This link can be established in two ways:
+
+- **From the Pipelines page:** Open a deal card and select a conversation from the contact's history in the deal form.
+- **From the Inbox sidebar:** With a conversation open, the contact sidebar shows linked deals. Use the **Create Deal** button there to open a deal pre-populated with the contact and current conversation.
+
+The `create_deal` automation step can also create deals automatically when a trigger fires (e.g. when a contact sends a keyword), with `pipeline_id` and `stage_id` configured in the step.
+
+## Account-level default currency
+
+The currency displayed on deal cards and in pipeline analytics defaults to the account-level currency configured in migration 021. Individual deals can override this with their own `currency` field. To change the account default, update the currency setting in your account settings.
+
+<Tip>
+  Use the `create_deal` automation step to move leads into your pipeline the moment they message you. Pair it with a `keyword_match` trigger (e.g. the word "pricing") or a `first_inbound_message` trigger to create a deal and assign it to an agent without any manual intervention. See [Automations](/features/automations) for step-by-step setup.
+</Tip>

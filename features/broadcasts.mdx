@@ -1,0 +1,128 @@
+---
+title: "WhatsApp Broadcast Campaigns"
+sidebarTitle: "Broadcasts"
+description: "Send Meta-approved WhatsApp template messages to lists of contacts. Track delivery and read receipts per recipient with variable substitution per contact."
+---
+
+Wacrm's Broadcasts feature lets you reach hundreds or thousands of WhatsApp contacts at once using Meta-approved message templates. Unlike the inbox — which handles one conversation at a time — a broadcast fans out a single template to a list of recipients in the background, then tracks delivery and read receipts for each person individually. Because Meta enforces template approval before any message can reach a customer outside an active 24-hour window, broadcasts are always template-based.
+
+## How broadcasts work
+
+<Steps>
+  <Step title="Choose a template">
+    Select a Meta-approved template from your account's template library. Only templates with `APPROVED` status can be used in a live broadcast. Templates are synced from Meta on the Templates page and can also be created and submitted for review directly from Wacrm.
+  </Step>
+  <Step title="Pick recipients">
+    Enter the list of contacts to receive the broadcast. Recipients can be selected manually, filtered by tag, or supplied via the API. Each recipient row can carry its own `params` array for per-contact body variable substitution (see [Variable substitution](#recipient-variable-substitution) below).
+  </Step>
+  <Step title="Send">
+    Confirm and send. Wacrm updates the broadcast status to `sending` and fans out the template messages in the background via the Meta Cloud API. The `delivered_count` and `read_count` counters climb in real time as Meta's webhook delivers status updates.
+  </Step>
+</Steps>
+
+## Template management
+
+Templates are stored locally in the `message_templates` table and synced from Meta. The following operations are available from the Templates page in Settings:
+
+| Action | Description |
+|---|---|
+| **Sync from Meta** | Pulls the latest status and content for all your WABA's templates. Run this after approvals, rejections, or pauses arrive from Meta. |
+| **Create template** | Define a new template with a text or image header, body text with `{{1}}` variable placeholders, an optional footer, and optional buttons (Quick Reply, URL, Phone Number, Copy Code). |
+| **Submit for review** | Sends the template to Meta for approval. Meta's review typically takes a few minutes to a few days. |
+| **Edit / resubmit** | Rejected or paused templates can be edited and resubmitted. |
+
+Template statuses mirror Meta's own enum: `DRAFT`, `PENDING`, `APPROVED`, `REJECTED`, `PAUSED`, `DISABLED`, `IN_APPEAL`, `PENDING_DELETION`.
+
+<Note>
+  Set `WHATSAPP_TEMPLATES_DRY_RUN=true` in your environment to test template submission without sending any request to the Meta API. The template row is created locally with `DRAFT` status and the submission step is skipped. Useful for development and CI environments.
+</Note>
+
+## Recipient variable substitution
+
+WhatsApp template bodies can contain numbered variable placeholders such as `{{1}}`, `{{2}}`, etc. Each recipient in a broadcast can receive different values for these placeholders — for example, a personalised greeting with the contact's first name.
+
+When creating a broadcast via the API, use the `recipients` array (preferred over the legacy `phone_numbers` shape) to supply per-recipient `params`:
+
+```json
+{
+  "template_name": "order_confirmation",
+  "template_language": "en_US",
+  "recipients": [
+    { "phone": "+15551234567", "params": ["Alice", "ORD-001"] },
+    { "phone": "+15559876543", "params": ["Bob",   "ORD-002"] }
+  ]
+}
+```
+
+Each element of `params` maps to the corresponding `{{N}}` placeholder in the template body. For more structured sends — including header text variable overrides, media URL overrides, and button value substitution — use the `messageParams` key on each recipient instead.
+
+The legacy `phone_numbers` + `template_params` shape is still accepted for backward compatibility, but all recipients will receive the same variable values in that mode.
+
+## Delivery tracking
+
+Meta sends webhook callbacks to Wacrm's webhook endpoint as messages are delivered and read. The broadcast engine maps these callbacks back to individual `BroadcastRecipient` rows using the `whatsapp_message_id` stored at send time.
+
+The `Broadcast` record exposes the following aggregate counters:
+
+| Field | Description |
+|---|---|
+| `total_recipients` | Total number of recipients in the broadcast. |
+| `sent_count` | Messages successfully accepted by Meta. |
+| `delivered_count` | Messages confirmed delivered to the recipient's device. |
+| `read_count` | Messages opened and read by the recipient. |
+| `replied_count` | Recipients who replied to the broadcast message. |
+| `failed_count` | Messages that failed (invalid number, policy block, etc.). |
+
+The Broadcasts list page shows delivery and read rates as inline progress bars and polls for updates every 5 seconds while any broadcast is in the `sending` state. Polling pauses automatically when the browser tab is hidden and resumes on tab focus.
+
+Each `BroadcastRecipient` row also carries timestamped fields (`sent_at`, `delivered_at`, `read_at`, `replied_at`) and an `error_message` for failed sends, giving you per-contact audit detail on the broadcast detail page.
+
+## Broadcast status lifecycle
+
+A broadcast moves through statuses as it progresses:
+
+```
+draft → sending → sent
+```
+
+- **`draft`** — created but not yet sent.
+- **`scheduled`** — reserved for future scheduled sends.
+- **`sending`** — the fan-out is in progress; `sent_count` and `failed_count` are actively incrementing.
+- **`sent`** — all recipients have been attempted; `delivered_count` and `read_count` continue to climb as Meta delivers webhook callbacks.
+- **`failed`** — the broadcast could not be processed (e.g. WhatsApp not configured).
+
+## Scale and rate limits
+
+Broadcasts fan out in the background without blocking the HTTP response. When sending via the public API, the recipient list is capped at **1,000 recipients per request**. For campaigns larger than 1,000 contacts, split the recipient list into batches of up to 1,000 and call the endpoint once per batch.
+
+The server applies a per-user rate limit on broadcast initiation (independent of the per-message send limit) to protect your Meta API quota.
+
+## API access
+
+Broadcasts can be launched and monitored programmatically using a scoped API key with the `broadcasts:send` scope.
+
+```bash
+# Launch a broadcast
+curl -X POST https://your-wacrm-instance.com/api/v1/broadcasts \
+  -H "Authorization: Bearer <api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "May Promo",
+    "template_name": "may_promotion",
+    "template_language": "en_US",
+    "recipients": [
+      { "phone": "+15551234567", "params": ["Alice"] },
+      { "phone": "+15559876543", "params": ["Bob"] }
+    ]
+  }'
+
+# Poll broadcast status
+curl https://your-wacrm-instance.com/api/v1/broadcasts/<id> \
+  -H "Authorization: Bearer <api_key>"
+```
+
+See the [Broadcasts API reference](/api/broadcasts) for the full request schema, response shape, and pagination details for listing past broadcasts.
+
+<Warning>
+  Only **Meta-approved** templates can be sent in a broadcast. Submitting a template for review does not guarantee approval — Meta may reject templates that do not comply with their Business Messaging Policy. Always test your template with a small audience and verify `APPROVED` status before launching to your full contact list.
+</Warning>

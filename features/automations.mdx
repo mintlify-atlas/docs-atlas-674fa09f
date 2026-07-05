@@ -1,0 +1,174 @@
+---
+title: "No-Code Automations for WhatsApp"
+sidebarTitle: "Automations"
+description: "Build visual trigger-action workflows in Wacrm. Automate replies, tag contacts, call webhooks, and create conditional branches without writing code."
+---
+
+Automations are background workflows that fire in response to events — a new message arrives, a keyword matches, a contact is created — and then execute a sequence of steps such as sending a reply, tagging the contact, or hitting a webhook. They are distinct from [Flows](/features/flows), which are interactive conversational menus that guide a contact through a multi-step dialogue inside WhatsApp. Automations run silently in the background; Flows take over the conversation.
+
+## Triggers
+
+Every automation begins with a trigger — the event that causes it to run. Wacrm fires the automation once per matching event, then walks through the step list in order.
+
+<CardGroup cols={2}>
+  <Card title="new_message_received" icon="message">
+    Fires on every inbound WhatsApp message, regardless of whether the contact is new or returning. Use this for always-on rules like out-of-office replies.
+  </Card>
+  <Card title="first_inbound_message" icon="user-plus">
+    Fires the first time a contact sends any message to your number. Catches both brand-new contacts and manually added or imported contacts on their first-ever reply — making it the right choice for welcome messages.
+  </Card>
+  <Card title="new_contact_created" icon="address-book">
+    Fires when a contact is added to Wacrm — either manually through the UI or via CSV import. No inbound message is required.
+  </Card>
+  <Card title="keyword_match" icon="magnifying-glass">
+    Fires when an inbound message body contains (or exactly matches) one or more configured keywords. Case-sensitive matching is optional. Useful for routing pricing or support enquiries.
+  </Card>
+  <Card title="conversation_assigned" icon="user-check">
+    Fires when a conversation is assigned to an agent — either manually or by another automation step. Use it to notify the assignee or send an acknowledgement to the contact.
+  </Card>
+  <Card title="tag_added" icon="tag">
+    Fires when a specific tag is applied to a contact. Combine with a `send_message` step to start a nurture sequence the moment a contact is marked as a lead.
+  </Card>
+  <Card title="time_based" icon="clock">
+    Fires on a cron-style schedule (e.g. every weekday at 09:00 in your timezone). Requires cron infrastructure — see [Cron setup](#cron-setup-for-wait-steps) below.
+  </Card>
+</CardGroup>
+
+## Step types
+
+Steps are executed in order after the trigger fires. A `condition` step can branch execution into a **yes** path and a **no** path; all other steps execute linearly.
+
+<CardGroup cols={2}>
+  <Card title="send_message" icon="paper-plane">
+    Send a plain-text WhatsApp reply to the contact. The message is sent from your connected WhatsApp number. Supports static text only — use a `send_template` step if you need approved template messages.
+  </Card>
+  <Card title="send_template" icon="file-lines">
+    Send an approved WhatsApp message template. Accepts a template name, language, and optional variable values.
+  </Card>
+  <Card title="add_tag / remove_tag" icon="tags">
+    Apply or remove a tag on the contact. Tag IDs are selected from your existing tags in the builder. Useful for segmentation and triggering downstream `tag_added` automations.
+  </Card>
+  <Card title="assign_conversation" icon="user-gear">
+    Assign the open conversation to a specific agent or to the next agent in a round-robin rotation.
+  </Card>
+  <Card title="update_contact_field" icon="pen-to-square">
+    Write a value to a built-in contact field (`name`, `email`, `company`) or to any custom field using the `custom:<field_id>` prefix. Supports `{{ vars.* }}` and `{{ message.text }}` interpolation at runtime.
+  </Card>
+  <Card title="create_deal" icon="briefcase">
+    Open a new deal in one of your pipelines. Specify the pipeline, stage, deal title, and an optional monetary value.
+  </Card>
+  <Card title="condition" icon="code-branch">
+    Branch execution based on a predicate. The **yes** path runs when the condition is true; the **no** path runs otherwise. Supported subjects are listed in the [Conditions](#conditions) section below.
+  </Card>
+  <Card title="wait" icon="hourglass-half">
+    Pause execution for a configured duration — minutes, hours, or days — before continuing to the next step. Requires cron infrastructure. See the warning below.
+  </Card>
+  <Card title="send_webhook" icon="webhook">
+    POST a JSON payload to any external HTTPS URL. Accepts custom headers and a body template. Use it to push events into Zapier, Make, your own API, or any HTTP endpoint.
+  </Card>
+  <Card title="close_conversation" icon="circle-check">
+    Mark the conversation as closed without assigning it to an agent. Useful as the last step in self-service deflection flows.
+  </Card>
+</CardGroup>
+
+## Conditions
+
+A `condition` step evaluates a predicate and routes execution down the **yes** or **no** branch. The following subjects are available:
+
+| Subject | What it tests |
+|---|---|
+| `contact_field` | Compares a named contact field (e.g. `company`, `email`) against a value using equals or contains. |
+| `tag_presence` | Checks whether the contact currently has a specific tag applied. |
+| `message_content` | Tests whether the inbound message body contains a given substring. |
+| `time_of_day` | Matches a time window in `HH:mm-HH:mm` format (e.g. `18:00-09:00` for out-of-hours). |
+
+## Pre-built templates
+
+When you click **New automation** you can start from a blank slate or pick one of the four starter templates. Each template pre-fills the trigger, step list, and sample text so you can activate it with minimal editing.
+
+<CardGroup cols={2}>
+  <Card title="Welcome Message" icon="hand-wave">
+    **Trigger:** `first_inbound_message`
+
+    Sends a greeting message the first time a contact writes in, then applies a tag. A good default for every new Wacrm install.
+  </Card>
+  <Card title="Out of Office" icon="moon">
+    **Trigger:** `new_message_received`
+
+    Uses a `time_of_day` condition (`18:00–09:00`) to detect off-hours. If the message arrives outside business hours, it sends an auto-reply letting the contact know when to expect a response.
+  </Card>
+  <Card title="Lead Qualifier" icon="filter">
+    **Trigger:** `keyword_match` — keywords: `pricing`, `quote`, `buy`
+
+    Responds with a qualifying question, waits 10 minutes for a reply, then assigns the conversation via round-robin to an available agent.
+  </Card>
+  <Card title="Follow-up Reminder" icon="clock-rotate-left">
+    **Trigger:** `new_message_received`
+
+    Waits 1 day and then sends a gentle nudge if the contact hasn't received a further reply. Keeps leads from going cold.
+  </Card>
+</CardGroup>
+
+## Building an automation
+
+<Steps>
+  <Step title="Open the builder">
+    Navigate to **Automations** in the sidebar and click **New automation**. Optionally pick a template from the dialog.
+  </Step>
+  <Step title="Name and describe it">
+    Give the automation a clear name and an optional description so your team understands its purpose at a glance.
+  </Step>
+  <Step title="Choose a trigger">
+    Select the event type from the trigger dropdown and configure any trigger-specific options (keywords, tag, schedule).
+  </Step>
+  <Step title="Add steps">
+    Click **Add step** to append steps to the list. For a `condition` step, configure the subject and operand; the builder creates a **yes** branch and a **no** branch automatically. Drag to reorder steps within a branch.
+  </Step>
+  <Step title="Activate">
+    Toggle the automation active. Wacrm starts evaluating the trigger on the next matching event immediately.
+  </Step>
+</Steps>
+
+## Cron setup for Wait steps
+
+`wait` steps and `time_based` triggers pause or schedule execution and resume it at a later time. Wacrm stores pending executions in the database and drains them when `GET /api/automations/cron` is called.
+
+To enable this, you need two things:
+
+1. **Set `AUTOMATION_CRON_SECRET`** in your `.env.local`:
+
+```bash
+# Generate a secure random value, e.g.:
+# openssl rand -hex 32
+AUTOMATION_CRON_SECRET=your-long-random-secret
+```
+
+2. **Configure an external scheduler** (cron job, GitHub Actions scheduled workflow, Vercel Cron, Uptime Robot, etc.) to call the endpoint on a regular cadence:
+
+```
+GET https://your-domain.com/api/automations/cron?secret=<AUTOMATION_CRON_SECRET>
+```
+
+The endpoint is safe to call frequently — once per minute is a reasonable default. It processes all overdue pending executions in a single pass and returns a count.
+
+The same secret also protects the Flows stale-run sweep at `GET /api/flows/cron`, so a single pinger can hit both endpoints.
+
+<Warning>
+  If you use `wait` steps or `time_based` triggers and do **not** configure the cron caller, pending executions will accumulate in the database but never drain. Contacts will never receive the delayed messages, and follow-up automations will never fire. Set `AUTOMATION_CRON_SECRET` and register your external scheduler before activating any automation that uses a `wait` step.
+</Warning>
+
+## Execution logs
+
+Every time an automation runs, Wacrm writes a log entry recording the trigger event, which steps ran, their per-step status (`success`, `skipped`, or `failed`), and an overall status (`success`, `partial`, or `failed`).
+
+To view the execution history for a specific automation:
+
+1. Open **Automations** in the sidebar.
+2. Click the automation you want to inspect.
+3. Select the **Logs** tab — or navigate directly to `/automations/[id]/logs`.
+
+Each log row shows the contact that triggered the run, the timestamp, and a collapsible step-by-step breakdown. Failed steps include an error detail to help diagnose misconfigured webhooks, missing tags, or network timeouts.
+
+<Tip>
+  Use the logs tab after activating a new automation to confirm it fired as expected before leaving it running unsupervised.
+</Tip>

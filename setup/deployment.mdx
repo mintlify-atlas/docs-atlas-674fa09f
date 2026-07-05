@@ -1,0 +1,228 @@
+---
+title: "Deploy Wacrm to Production"
+sidebarTitle: "Deployment"
+description: "Deploy Wacrm on Hostinger (recommended), Vercel, Railway, or a self-managed VPS. Covers build, env vars, and post-deploy checklist."
+---
+
+Wacrm is a standard Next.js 16 application — it runs anywhere that Node.js 20 or later is available. There is no Docker image required, no Kubernetes cluster to manage, and no proprietary runtime to learn. Pick the hosting path that fits your team, paste your environment variables, and deploy.
+
+<Tabs>
+  <Tab title="Hostinger (Recommended)">
+    Hostinger's Managed Node.js hosting is the tested and recommended deployment path for Wacrm. It handles SSL, CDN, process management, and Git-based deploys out of the box so you can go from a fresh fork to a live CRM in minutes.
+
+    **Why Hostinger?**
+
+    <CardGroup cols={2}>
+      <Card title="One-click Git deploy" icon="git-alt">
+        Connect your fork, push to `main`, and Hostinger builds and ships it automatically. No SSH, no Docker, no CI pipeline to wire up.
+      </Card>
+      <Card title="Managed Node.js" icon="node-js">
+        Next.js 16 with App Router, Server Actions, and ISR runs out of the box. Node version management and reverse proxies are handled for you.
+      </Card>
+      <Card title="Free SSL + CDN" icon="shield-halved">
+        Automatic HTTPS on your custom domain (or a free domain included with annual plans). Required for the WhatsApp webhook. Global CDN and LiteSpeed serve assets fast with no extra setup.
+      </Card>
+      <Card title="DDoS protection + 24/7 support" icon="headset">
+        Built-in DDoS protection at the edge — important since the webhook endpoint is a public target. Live chat support in 20+ languages.
+      </Card>
+    </CardGroup>
+
+    **Step-by-step setup**
+
+    <Steps>
+      <Step title="Fork the repository">
+        Go to [github.com/ArnasDon/wacrm](https://github.com/ArnasDon/wacrm) and click **Fork**. This gives you a personal copy you own and can customise.
+      </Step>
+
+      <Step title="Create a Node.js app in hPanel">
+        Log in to [hPanel](https://hpanel.hostinger.com), go to **Websites → Create**, and choose **Node.js** as the application type. Select your hosting plan (Premium, Business, or Cloud all support Managed Node.js).
+      </Step>
+
+      <Step title="Connect your fork">
+        In the app configuration screen, connect your GitHub account and select the fork you just created. Set the **branch** to `main` and leave the build command as the default (`npm run build`) — Wacrm's `package.json` already has the correct build and start scripts.
+      </Step>
+
+      <Step title="Set your environment variables">
+        In **hPanel → Your App → Environment Variables**, add all required variables. At minimum you need:
+
+        ```bash
+        NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+        NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+        SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+        ENCRYPTION_KEY=your-64-char-hex-key
+        META_APP_SECRET=your-meta-app-secret
+        NEXT_PUBLIC_SITE_URL=https://your-crm.example.com
+        ```
+
+        See the full reference in `.env.local.example` in the repository root.
+      </Step>
+
+      <Step title="Push to main to trigger a deploy">
+        Make any commit to `main` (or trigger a manual deploy from hPanel). Hostinger clones your fork, runs `npm run build`, and starts the server. The process typically takes 2–4 minutes. Once live, your CRM is available at your configured domain with HTTPS already active.
+      </Step>
+    </Steps>
+
+    <Tip>
+      You can view live application logs in real time from hPanel under **Your App → Logs**. This is the fastest way to diagnose a startup error or trace a webhook delivery issue without needing SSH access.
+    </Tip>
+  </Tab>
+
+  <Tab title="Vercel">
+    Vercel is a natural fit for Next.js — the App Router, Server Actions, and edge middleware all work without any extra configuration.
+
+    **Deploy via the Vercel CLI**
+
+    ```bash
+    # Install the CLI (if you haven't already)
+    npm install -g vercel
+
+    # Deploy to production from your project root
+    vercel --prod
+    ```
+
+    **Deploy via Git integration**
+
+    1. Go to [vercel.com/new](https://vercel.com/new) and import your GitHub fork.
+    2. Vercel auto-detects Next.js and sets the correct framework preset.
+    3. Click **Deploy** — the first deploy runs immediately.
+
+    For subsequent deploys, Vercel automatically rebuilds and ships every push to the production branch.
+
+    **Set environment variables**
+
+    Add all required env vars in the Vercel dashboard under **Project → Settings → Environment Variables**. Set them for the **Production** environment (and optionally Preview/Development if you use branch deploys):
+
+    ```bash
+    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+    ENCRYPTION_KEY=your-64-char-hex-key
+    META_APP_SECRET=your-meta-app-secret
+    NEXT_PUBLIC_SITE_URL=https://your-crm.vercel.app
+    ```
+
+    <Note>
+      Vercel's serverless model works seamlessly with Next.js App Router. Wacrm's webhook route sets `export const maxDuration = 60` to accommodate inbound message processing (media verification, automation dispatch, AI auto-reply) within Vercel's function timeout ceiling. Check your Vercel plan's function duration limit and adjust if needed.
+    </Note>
+  </Tab>
+
+  <Tab title="VPS / Other">
+    Any Linux VPS (DigitalOcean, Hetzner, AWS EC2, etc.) or PaaS that exposes a Node.js runtime (Railway, Render, Fly.io) can run Wacrm.
+
+    **Build and start**
+
+    ```bash
+    # Install dependencies
+    npm install
+
+    # Build the Next.js production bundle
+    npm run build
+
+    # Start the production server
+    NODE_ENV=production npm start
+    ```
+
+    The app listens on port `3000` by default. Set `PORT=8080` (or any port) in your environment to override.
+
+    **Process management with PM2**
+
+    On a bare VPS, use [PM2](https://pm2.keymetrics.io) to keep the process alive across crashes and server reboots:
+
+    ```bash
+    # Install PM2 globally
+    npm install -g pm2
+
+    # Start Wacrm under PM2
+    pm2 start npm --name wacrm -- start
+
+    # Save the process list and enable startup on reboot
+    pm2 save
+    pm2 startup
+    ```
+
+    **Reverse proxy with Nginx or Caddy**
+
+    You need a reverse proxy in front of Node to terminate TLS (required for the WhatsApp webhook). A minimal **Nginx** config:
+
+    ```nginx
+    server {
+        listen 443 ssl;
+        server_name your-crm.example.com;
+
+        ssl_certificate     /etc/letsencrypt/live/your-crm.example.com/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/your-crm.example.com/privkey.pem;
+
+        location / {
+            proxy_pass         http://127.0.0.1:3000;
+            proxy_http_version 1.1;
+            proxy_set_header   Upgrade $http_upgrade;
+            proxy_set_header   Connection 'upgrade';
+            proxy_set_header   Host $host;
+            proxy_set_header   X-Real-IP $remote_addr;
+            proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header   X-Forwarded-Proto $scheme;
+            proxy_cache_bypass $http_upgrade;
+        }
+    }
+    ```
+
+    Or use [**Caddy**](https://caddyserver.com) for automatic HTTPS with a much simpler config:
+
+    ```caddy
+    your-crm.example.com {
+        reverse_proxy localhost:3000
+    }
+    ```
+
+    Caddy automatically provisions and renews a Let's Encrypt certificate for the configured domain.
+
+    **Required environment variables**
+
+    Set all variables in your shell environment, a `.env.local` file, or your platform's secret manager before starting the process:
+
+    ```bash
+    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+    ENCRYPTION_KEY=your-64-char-hex-key
+    META_APP_SECRET=your-meta-app-secret
+    NODE_ENV=production
+    NEXT_PUBLIC_SITE_URL=https://your-crm.example.com
+    ```
+  </Tab>
+</Tabs>
+
+## Post-deploy checklist
+
+Run through these steps after every fresh deployment to confirm everything is wired up correctly before handing the CRM to your team.
+
+<Steps>
+  <Step title="Verify the webhook endpoint responds to Meta's challenge">
+    In the [Meta for Developers dashboard](https://developers.facebook.com), go to **WhatsApp → Configuration** and click **Verify** next to your webhook URL. Meta sends a `GET` request with `hub.mode=subscribe` — Wacrm should respond with `200 OK` and the challenge string. A `403` means the verify token doesn't match what you saved in Settings → WhatsApp; a `502` means the app isn't running or the URL is wrong.
+  </Step>
+
+  <Step title="Send a test WhatsApp message">
+    Send a WhatsApp message from any phone to your registered business number. The message should appear in the Wacrm **Inbox** within a few seconds. If it doesn't appear, check your application logs for `[webhook] rejected request with invalid signature` (wrong `META_APP_SECRET`) or `No config found for phone_number_id` (phone number ID mismatch in Settings → WhatsApp).
+  </Step>
+
+  <Step title="Confirm the dashboard loads with correct stats">
+    Log in to the dashboard and verify that the **Overview** page loads without errors and shows your account's activity feed. A blank dashboard usually indicates a Supabase connection issue — double-check `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+  </Step>
+
+  <Step title="Configure the automations cron (if you use Wait steps)">
+    Automations with **Wait** steps require a periodic cron job to drain pending executions. Set `AUTOMATION_CRON_SECRET` to a long random string:
+
+    ```bash
+    # Generate a secret:
+    openssl rand -hex 32
+
+    AUTOMATION_CRON_SECRET=your-generated-secret
+    ```
+
+    Then configure an external cron service (e.g. [cron-job.org](https://cron-job.org), Vercel Cron, or a server cron) to `GET https://your-crm.example.com/api/automations/cron?secret=your-generated-secret` every minute. Automations that use only instant triggers (new message, new contact, keyword) work without this.
+  </Step>
+</Steps>
+
+<Note>
+  **Set `NEXT_PUBLIC_SITE_URL` to your canonical domain.** This variable is used when generating invite links from background workers and cron jobs that have no incoming HTTP request to derive the origin from. Without it, invite links generated in those contexts fall back to a default and may point to the wrong URL. The format is `https://your-crm.example.com` — no trailing slash.
+</Note>

@@ -1,0 +1,155 @@
+---
+title: "Configure Supabase for Wacrm"
+sidebarTitle: "Supabase"
+description: "Create a Supabase project, apply all 30 migrations, configure storage, and connect your Wacrm instance to Postgres with Row Level Security."
+---
+
+Wacrm uses [Supabase](https://supabase.com) as its entire data layer — Postgres for relational data, Auth for user sessions, Storage for media files, and Row Level Security to enforce per-account data isolation. This page walks you through creating a project, pulling the three credentials your app needs, running all 30 migrations, and confirming the storage buckets and pgvector extension are ready.
+
+## Prerequisites
+
+- A Supabase account (the free tier is sufficient to get started)
+- Wacrm forked from GitHub and cloned locally
+- The [Supabase CLI](https://supabase.com/docs/guides/cli) installed (`npm install -g supabase`) if you plan to apply migrations via the terminal
+
+<Steps>
+  <Step title="Create a new Supabase project">
+    Log in to the [Supabase dashboard](https://supabase.com/dashboard) and click **New project**. Choose your organisation, pick a region close to your users, set a strong database password, and click **Create new project**. The project takes about a minute to provision.
+
+    <Note>
+      Save your database password now — Supabase won't show it again, and you'll need it if you ever connect to Postgres directly (e.g. `psql` or a migration tool that requires the raw connection string).
+    </Note>
+  </Step>
+
+  <Step title="Copy your API credentials">
+    Once the project is ready, go to **Project Settings → API**. You need three values:
+
+    | Environment variable | Where to find it |
+    |---|---|
+    | `NEXT_PUBLIC_SUPABASE_URL` | **Project URL** field at the top of the API settings page |
+    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Project API keys → anon public** |
+    | `SUPABASE_SERVICE_ROLE_KEY` | **Project API keys → service_role secret** |
+
+    Copy these into your `.env.local` file (or your host's environment variable panel in production):
+
+    ```bash
+    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+    SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+    ```
+
+    <Warning>
+      `SUPABASE_SERVICE_ROLE_KEY` bypasses Row Level Security and has full read/write access to every table. Never expose it in client-side code or commit it to source control. It must stay server-side only — Wacrm uses it exclusively in server routes (the WhatsApp webhook, the automation engine, and the public API key auth path).
+    </Warning>
+  </Step>
+
+  <Step title="Apply the database migrations">
+    All 30 migrations live in `supabase/migrations/`, numbered `001` through `030`. You can apply them using the **Supabase CLI** (recommended) or the **SQL editor** in the dashboard.
+
+    **Option A — Supabase CLI (recommended)**
+
+    Link your local project to the remote Supabase project, then push all migrations in one command:
+
+    ```bash
+    # Authenticate with Supabase
+    supabase login
+
+    # Link to your project (find your project ref in Project Settings → General)
+    supabase link --project-ref your-project-ref
+
+    # Push all migrations
+    supabase db push
+    ```
+
+    The CLI tracks which migrations have already been applied and only runs new ones on subsequent pushes.
+
+    **Option B — SQL editor**
+
+    Open the [SQL editor](https://supabase.com/dashboard/project/_/sql) in the Supabase dashboard. Open each file from `supabase/migrations/` in order and run it. Migrations must be applied sequentially because later files reference tables and functions created by earlier ones.
+
+    The migrations are named descriptively so you always know what each one adds:
+
+    ```
+    001_initial_schema.sql
+    002_pipelines_enhancements.sql
+    003_broadcast_recipient_wamid.sql
+    004_contact_delete_set_null.sql
+    005_broadcast_counts_incremental.sql
+    006_automations.sql
+    007_automations_increment_counter.sql
+    008_profile_avatars_storage.sql
+    009_message_actions.sql
+    010_flows.sql
+    011_profile_beta_features.sql
+    012_flows_increment_counter.sql
+    013_whatsapp_config_phone_number_id_unique.sql
+    014_message_templates_meta_integration.sql
+    015_whatsapp_config_registration.sql
+    016_flow_media.sql
+    017_account_sharing.sql
+    018_account_member_rpcs.sql
+    019_invitation_rpcs.sql
+    020_account_sharing_followups.sql
+    021_account_default_currency.sql
+    022_contact_phone_dedup.sql
+    023_chat_media.sql
+    024_member_presence.sql
+    025_filter_contacts_by_tags.sql
+    026_api_keys.sql
+    027_notifications.sql
+    028_webhook_endpoints.sql
+    029_ai_reply.sql
+    030_ai_knowledge.sql
+    ```
+  </Step>
+
+  <Step title="Confirm storage buckets">
+    Two migrations create the Storage buckets Wacrm needs:
+
+    - **Migration 008** (`008_profile_avatars_storage.sql`) — creates the `profile-avatars` bucket for team member profile pictures.
+    - **Migration 023** (`023_chat_media.sql`) — creates the `chat-media` bucket for inbound images, videos, documents, and audio messages received in the inbox.
+
+    After running `supabase db push`, verify both buckets exist by going to **Storage** in the Supabase dashboard. You should see `profile-avatars` and `chat-media` listed. If they're missing, re-run those two migrations manually via the SQL editor.
+  </Step>
+
+  <Step title="Confirm the pgvector extension">
+    Migration 030 (`030_ai_knowledge.sql`) sets up the AI knowledge base and runs:
+
+    ```sql
+    CREATE EXTENSION IF NOT EXISTS vector;
+    ```
+
+    Supabase provides the `pgvector` extension on all plans — it just needs to be enabled. The migration does this automatically. To verify it's active, open the **Database → Extensions** page in the Supabase dashboard and confirm `vector` is enabled, or run:
+
+    ```sql
+    SELECT * FROM pg_extension WHERE extname = 'vector';
+    ```
+
+    <Warning>
+      If you are using a self-hosted Postgres instance instead of Supabase, you must install `pgvector` manually before running migration 030. On Supabase, no extra steps are required.
+    </Warning>
+  </Step>
+</Steps>
+
+## Notable migrations at a glance
+
+The table below highlights the migrations that introduce major product features. You don't need to run them individually — `supabase db push` applies all 30 at once — but this gives you a map of when each capability was added.
+
+| Migration | What it adds |
+|---|---|
+| `001_initial_schema.sql` | Core tables: `contacts`, `conversations`, `messages`, `broadcasts`, `broadcast_recipients`, `whatsapp_config`, `pipelines`, `deals`, `profiles` |
+| `006_automations.sql` | Automations engine: `automations`, `automation_steps`, `automation_executions` tables and trigger logic |
+| `010_flows.sql` | Visual flow builder: `flows`, `flow_nodes`, `flow_edges`, `flow_runs` tables |
+| `017_account_sharing.sql` | Multi-user team accounts: `account_members`, `invitations`, role-based access control (owner / admin / agent / viewer) |
+| `026_api_keys.sql` | Public REST API (`/api/v1`): `api_keys` table with scoped, revocable keys stored as hashes |
+| `028_webhook_endpoints.sql` | Outbound webhooks: `webhook_endpoints` and `webhook_deliveries` tables for event fan-out |
+| `029_ai_reply.sql` | AI reply assistant configuration: encrypted per-account OpenAI / Anthropic key storage, auto-reply settings |
+| `030_ai_knowledge.sql` | AI knowledge base: `knowledge_entries` table with full-text and optional pgvector semantic search |
+
+## Row Level Security
+
+<Note>
+  Every table in Wacrm's schema has Row Level Security enabled. All data is isolated by `account_id` — a team member can only read and write rows that belong to their account. The Supabase anon key and the user's session token operate within these RLS policies.
+
+  The `SUPABASE_SERVICE_ROLE_KEY` bypasses RLS entirely and must be kept server-side only. Wacrm only uses it in server-side routes where full cross-account access is required — such as the webhook handler that receives inbound messages before a user session is available.
+</Note>

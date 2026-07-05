@@ -1,0 +1,161 @@
+---
+title: "Broadcasts API — Launch Template Campaigns"
+sidebarTitle: "Broadcasts"
+description: "POST /api/v1/broadcasts launches a WhatsApp template broadcast. GET /api/v1/broadcasts/{id} polls delivery progress. Requires broadcasts:send scope."
+---
+
+The Broadcasts API lets you send a WhatsApp template message to a large list of recipients in a single API call. Broadcasts are asynchronous — Wacrm persists the broadcast and its recipient rows immediately and fans out the Meta API calls in the background, so your request returns fast. Use `GET /api/v1/broadcasts/{id}` to poll for send progress and delivery stats.
+
+## `POST /api/v1/broadcasts`
+
+**Required scope:** `broadcasts:send`
+
+Creates a broadcast and begins sending in the background. The response is returned with HTTP `202 Accepted` as soon as the broadcast record is persisted — the actual message sends happen after the response is delivered.
+
+### Request body
+
+<ParamField body="name" type="string" required>
+  A human-readable label for the broadcast (e.g. `"July promo"`). Appears in the dashboard broadcast list.
+</ParamField>
+
+<ParamField body="template_name" type="string" required>
+  The exact name of the approved WhatsApp template to send (e.g. `"promo_july"`). Must match the name as it appears in Meta Business Manager.
+</ParamField>
+
+<ParamField body="template_language" type="string" required>
+  The BCP-47 language code of the template variant to use (e.g. `"en_US"`).
+</ParamField>
+
+<ParamField body="recipients" type="object[]" required>
+  An array of recipient objects. At least one recipient is required; maximum **1000 per request**.
+
+  <Expandable title="Recipient object fields">
+    <ParamField body="to" type="string" required>
+      The recipient's phone number in E.164 format (e.g. `+14155550123`). Numbers that fail E.164 validation are silently dropped and counted as `rejected`.
+    </ParamField>
+
+    <ParamField body="params" type="string[]">
+      Optional array of positional string values for template body variable substitution. The first element maps to `{{1}}`, the second to `{{2}}`, and so on. Omit if the template has no variables.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Example
+
+```bash
+curl -X POST https://your-crm.example.com/api/v1/broadcasts \
+  -H "Authorization: Bearer wacrm_live_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "name": "July promo",
+        "template_name": "promo_july",
+        "template_language": "en_US",
+        "recipients": [
+          { "to": "+14155550123", "params": ["Jane"] },
+          { "to": "+14155550124" }
+        ]
+      }'
+```
+
+### Response (202)
+
+```json
+{
+  "data": {
+    "broadcast_id": "bc1d2e3f-…",
+    "status": "sending",
+    "total_recipients": 2,
+    "accepted": 2,
+    "rejected": 0
+  }
+}
+```
+
+<ResponseField name="broadcast_id" type="string">
+  UUID of the newly created broadcast. Pass this to `GET /api/v1/broadcasts/{id}` to poll for progress.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Always `"sending"` at creation time. Moves to `"sent"` once all fan-out attempts have completed.
+</ResponseField>
+
+<ResponseField name="total_recipients" type="number">
+  The number of recipients that were accepted and queued for sending.
+</ResponseField>
+
+<ResponseField name="accepted" type="number">
+  Number of phone numbers that passed validation and were queued.
+</ResponseField>
+
+<ResponseField name="rejected" type="number">
+  Number of phone numbers that failed E.164 validation and were dropped before sending.
+</ResponseField>
+
+<Warning>
+  The recipients array is capped at **1000 entries per request**. For larger campaigns, split your audience into batches of up to 1000 and make multiple `POST /api/v1/broadcasts` calls — one per batch. Each call returns its own `broadcast_id` that you can poll independently.
+</Warning>
+
+---
+
+## `GET /api/v1/broadcasts/{id}`
+
+**Required scope:** `broadcasts:send`
+
+Returns the current state and delivery statistics for a broadcast. Poll this endpoint after a `POST` to track send progress.
+
+```bash
+curl https://your-crm.example.com/api/v1/broadcasts/bc1d2e3f-… \
+  -H "Authorization: Bearer wacrm_live_xxx"
+```
+
+### Response
+
+```json
+{
+  "data": {
+    "id": "bc1d2e3f-…",
+    "name": "July promo",
+    "template_name": "promo_july",
+    "template_language": "en_US",
+    "status": "sent",
+    "total_recipients": 2,
+    "sent_count": 2,
+    "delivered_count": 1,
+    "read_count": 0,
+    "replied_count": 0,
+    "failed_count": 0,
+    "created_at": "2026-07-01T10:00:00.000Z",
+    "updated_at": "2026-07-01T10:00:45.000Z"
+  }
+}
+```
+
+<ResponseField name="status" type="string">
+  `"sending"` while the background fan-out is in progress; `"sent"` once all sends have been attempted.
+</ResponseField>
+
+<ResponseField name="sent_count" type="number">
+  Number of recipients for whom the send was accepted by Meta.
+</ResponseField>
+
+<ResponseField name="delivered_count" type="number">
+  Number of recipients who have received the message on their device. Updates in real time as Meta delivery webhooks arrive.
+</ResponseField>
+
+<ResponseField name="read_count" type="number">
+  Number of recipients who have opened the message. Updates in real time as Meta read-receipt webhooks arrive.
+</ResponseField>
+
+<ResponseField name="replied_count" type="number">
+  Number of recipients who replied to the broadcast message.
+</ResponseField>
+
+<ResponseField name="failed_count" type="number">
+  Number of sends that were rejected by Meta or could not be dispatched.
+</ResponseField>
+
+Returns `404` if the broadcast does not exist or belongs to a different account.
+
+<Tip>
+  `delivered_count` and `read_count` keep incrementing after `status` reaches `"sent"` — Meta delivers receipt webhooks asynchronously and they can arrive minutes or hours after the initial send. Continue polling if accurate delivery metrics matter for your workflow.
+</Tip>

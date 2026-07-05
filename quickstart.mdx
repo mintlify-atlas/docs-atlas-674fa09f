@@ -1,47 +1,97 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Get Started with Wacrm in 5 Minutes"
+sidebarTitle: "Quickstart"
+description: "Fork, clone, and run Wacrm locally. Covers prerequisites, environment setup, database migrations, and first login in five steps."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+Wacrm is designed to go from zero to a running local dev server in a single terminal session. The steps below walk you through forking the repository, wiring up environment variables, and opening the app in your browser. A full Meta Cloud API connection is only needed for production use — you can explore the UI and run migrations without one.
 
 ## Prerequisites
 
-Before you begin, you must have:
+Before you start, make sure you have:
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
+- **Node.js ≥ 20** — check with `node --version`. The `package.json` `engines` field enforces this.
+- **A Supabase project** — the free tier is sufficient for local development and small production deployments. Create one at [supabase.com](https://supabase.com).
+- **A Meta Developer account** — required in production to connect a WhatsApp Business number and verify webhook signatures. You can skip this for local development; the app will start without it, though inbound messages and outbound sends will not work until it is configured.
 
-## Get started
+## Setup
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
+  <Step title="Fork and clone the repository">
+    Start by forking the repository on GitHub so you have your own copy to customise and deploy. Then clone your fork locally:
 
     ```bash
-    npm install your-package
+    # Fork on GitHub first: https://github.com/ArnasDon/wacrm → Fork
+    git clone https://github.com/<your-username>/wacrm.git
+    cd wacrm
     ```
+
+    Working from your own fork means you control when (and whether) you pull in upstream changes, and you can push customisations freely without touching the upstream template.
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+
+  <Step title="Install dependencies">
+    Install the project's Node.js dependencies with npm:
 
     ```bash
-    your-cli init
+    npm install
     ```
+
+    This installs Next.js 16, the Supabase client libraries, React 19, and all other dependencies declared in `package.json`.
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+
+  <Step title="Configure environment variables">
+    Copy the example environment file and fill in your credentials:
 
     ```bash
-    your-cli start
+    cp .env.local.example .env.local
     ```
+
+    Open `.env.local` in your editor. At minimum, set these five variables before starting the dev server:
+
+    | Variable | Where to find it |
+    |---|---|
+    | `NEXT_PUBLIC_SUPABASE_URL` | Supabase dashboard → Project Settings → API |
+    | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase dashboard → Project Settings → API |
+    | `SUPABASE_SERVICE_ROLE_KEY` | Supabase dashboard → Project Settings → API |
+    | `ENCRYPTION_KEY` | Generate locally (see below) |
+    | `META_APP_SECRET` | Meta for Developers → App Settings → Basic |
+
+    Generate a secure `ENCRYPTION_KEY` with:
+
+    ```bash
+    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+    ```
+
+    This produces 64 hex characters (32 bytes), the correct size for AES-256-GCM encryption. See [Environment Variables](/environment-variables) for the complete reference, including recommended and optional variables.
+  </Step>
+
+  <Step title="Run Supabase migrations">
+    Wacrm uses Supabase migrations to set up all tables, RLS policies, storage buckets, and helper RPCs. Apply the migrations from the `supabase/migrations/` directory against your Supabase project before starting the app.
+
+    Full instructions — including how to use the Supabase CLI and how to handle version-specific migration notes — are in the [Supabase Setup](/setup/supabase) guide.
+  </Step>
+
+  <Step title="Start the dev server and log in">
+    Start the Turbopack development server:
+
+    ```bash
+    npm run dev
+    ```
+
+    Open [http://localhost:3000](http://localhost:3000) in your browser. You will be redirected to `/login` if no session exists, or straight to `/dashboard` if you are already signed in. Sign up with the email and password flow backed by Supabase Auth — the first user who signs up on a fresh database becomes the account owner.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+## Dev scripts reference
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+| Command | What it does |
+|---|---|
+| `npm run dev` | Turbopack dev server on port 3000 |
+| `npm run build` | Production build (Next.js also runs its own type-check here) |
+| `npm run typecheck` | `tsc --noEmit` — fast TypeScript-only pass |
+| `npm run lint` | ESLint across the project |
+| `npm run test` | Run the Vitest test suite once |
+
+<Tip>
+  For production deployment, Hostinger Managed Node.js is the recommended and tested path. Connect your fork, paste your Supabase and Meta environment variables into hPanel, and push to `main` — Hostinger builds and serves the app automatically, with free SSL, a global CDN, and DDoS protection included. See the [Deploy on Hostinger](https://wacrm.tech/docs/deployment-hostinger) guide for a full step-by-step walkthrough.
 </Tip>

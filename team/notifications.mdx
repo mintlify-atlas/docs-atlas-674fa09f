@@ -1,0 +1,59 @@
+---
+title: "In-App Notifications"
+sidebarTitle: "Notifications"
+description: "Wacrm delivers real-time in-app notifications for new messages, conversation assignments, and other account activity. Manage them from the notifications panel."
+---
+
+Wacrm keeps every agent informed about what needs their attention through an in-app notification system. Notifications arrive in real time and are personal — each team member sees only the notifications addressed to them, with no noise from activity on other conversations.
+
+## What triggers notifications
+
+Currently Wacrm delivers notifications for the following event:
+
+- **Conversation assigned** — when a conversation is assigned (or reassigned) to you, either by a teammate or by an automation. The notification includes who assigned it and the name of the contact.
+
+Self-assignment does not produce a notification. If an automation or the system performs the assignment (rather than a signed-in teammate), the notification is attributed to the system.
+
+<Note>
+  Additional notification types — new inbound messages, deal updates, and other account events — are planned for future releases. The `type` column in the `notifications` table already carries a `CHECK` constraint that will expand to include them.
+</Note>
+
+## Notifications panel
+
+Click the **bell icon** in the sidebar to open the notifications panel. An unread count badge on the bell updates in real time as new notifications arrive — no page refresh needed.
+
+The panel lists notifications in reverse chronological order. Each entry shows the notification title, a short body describing what happened, and a relative timestamp.
+
+## Marking notifications as read
+
+<Steps>
+  <Step title="Mark one notification as read">
+    Click any individual notification in the panel. Opening or clicking the notification marks it as read and clears it from the unread count.
+  </Step>
+  <Step title="Mark all as read">
+    Click **Mark all as read** at the top of the panel to clear all unread notifications at once.
+  </Step>
+</Steps>
+
+Only `read_at` can be updated from the client — the notification title, body, and other fields are immutable once created. This is enforced at the Postgres column-privilege level, not just in application logic.
+
+## Real-time delivery
+
+Notifications arrive via Supabase Realtime subscriptions. As soon as a notification row is inserted for your user ID, your browser receives it over a WebSocket and the unread badge updates immediately. There is no polling interval — the UI reacts the moment the assignment happens.
+
+The `notifications` table uses `REPLICA IDENTITY FULL`, which means Realtime UPDATE payloads include the full old and new row values. This allows the client to correctly compute the transition from unread to read without making an extra fetch.
+
+## Migration requirement
+
+Notifications require migration `027_notifications.sql`. If you are upgrading from a version before 0.3.0, apply this migration before deploying:
+
+```bash
+# Via Supabase CLI
+supabase db push
+```
+
+Or paste `supabase/migrations/027_notifications.sql` into the **Supabase Dashboard → SQL Editor** and run it. The migration creates the `notifications` table, sets up RLS policies, enables Realtime on the table, and installs the `notify_conversation_assigned` trigger on the `conversations` table.
+
+<Note>
+  Wacrm uses in-app notifications only. Browser push notifications (the Web Push API / service workers) are not currently supported. Notifications are visible while your browser tab is open; there is no background delivery mechanism.
+</Note>

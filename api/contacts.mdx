@@ -1,0 +1,169 @@
+---
+title: "Contacts API — Create, Read, and Update Contacts"
+sidebarTitle: "Contacts"
+description: "GET and POST /api/v1/contacts, GET and PATCH /api/v1/contacts/{id} — manage contacts by E.164 phone. Supports search, tag filtering, and find-or-create."
+---
+
+The Contacts API gives you programmatic access to your contact directory. You can list and search contacts, create new ones, and update existing records. All contact lookups are account-scoped — contacts belonging to a different account always return `404`, never `403`.
+
+## `GET /api/v1/contacts`
+
+**Required scope:** `contacts:read`
+
+Returns a paginated list of contacts ordered newest first. See [Pagination and Errors](/api/pagination-and-errors) for cursor mechanics and the `?limit=` parameter.
+
+### Query parameters
+
+| Parameter | Type   | Description                                                                                          |
+| --------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| `search`  | string | Case-insensitive substring match against the contact's `name` or `phone`.                           |
+| `tag`     | string | Filter to contacts that have the tag with this **tag UUID**. Returns the contact's full tag set.     |
+| `limit`   | number | Page size; default `50`, max `100`.                                                                  |
+| `cursor`  | string | Opaque cursor from the previous page's `meta.next_cursor`. Omit for the first page.                 |
+
+### Response
+
+```json
+{
+  "data": [
+    {
+      "id": "a1b2c3d4-…",
+      "phone": "+14155550123",
+      "name": "Jane Doe",
+      "email": null,
+      "company": "Acme",
+      "avatar_url": null,
+      "tags": [
+        { "id": "t1u2v3w4-…", "name": "vip", "color": "#3b82f6" }
+      ],
+      "created_at": "2026-01-15T09:00:00.000Z",
+      "updated_at": "2026-06-20T14:30:00.000Z"
+    }
+  ],
+  "meta": { "next_cursor": "eyJ…" }
+}
+```
+
+<ResponseField name="data" type="Contact[]">
+  Array of contact objects for the current page.
+
+  <Expandable title="Contact object fields">
+    <ResponseField name="id" type="string">UUID of the contact.</ResponseField>
+    <ResponseField name="phone" type="string">E.164 phone number.</ResponseField>
+    <ResponseField name="name" type="string | null">Display name, or `null` if not set.</ResponseField>
+    <ResponseField name="email" type="string | null">Email address, or `null` if not set.</ResponseField>
+    <ResponseField name="company" type="string | null">Company name, or `null` if not set.</ResponseField>
+    <ResponseField name="avatar_url" type="string | null">URL of the contact's avatar image, or `null`.</ResponseField>
+    <ResponseField name="tags" type="Tag[]">
+      Full list of tags attached to this contact, each with `id`, `name`, and `color`.
+    </ResponseField>
+    <ResponseField name="created_at" type="string">ISO 8601 creation timestamp.</ResponseField>
+    <ResponseField name="updated_at" type="string">ISO 8601 last-updated timestamp.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="meta.next_cursor" type="string | null">
+  Opaque cursor for the next page. `null` indicates the last page.
+</ResponseField>
+
+---
+
+## `POST /api/v1/contacts`
+
+**Required scope:** `contacts:write`
+
+Creates a contact. The operation is **find-or-create by phone number**: if a contact with the given E.164 number already exists in your account, it is returned as-is with HTTP `200`; a genuinely new contact returns HTTP `201`. This makes `POST /api/v1/contacts` safe to call idempotently from automations that receive phone numbers without knowing whether a record already exists.
+
+### Request body
+
+<ParamField body="phone" type="string" required>
+  The contact's phone number in E.164 format (e.g. `+14155550123`). Used as the unique key for find-or-create.
+</ParamField>
+
+<ParamField body="name" type="string">
+  Display name for the contact.
+</ParamField>
+
+<ParamField body="email" type="string">
+  Email address for the contact.
+</ParamField>
+
+<ParamField body="company" type="string">
+  Company or organisation name.
+</ParamField>
+
+<ParamField body="tags" type="string[]">
+  An array of tag **names** (not IDs) to assign to the contact. Tags that do not yet exist in your account are created automatically. This replaces any tags set during a prior create call only if the contact is new — to update tags on an existing contact, use `PATCH /api/v1/contacts/{id}`.
+</ParamField>
+
+### Response
+
+Returns the serialized contact object (same shape as the list rows above). HTTP status is `200` when an existing record was matched, `201` when a new contact was created.
+
+```bash
+curl -X POST https://your-crm.example.com/api/v1/contacts \
+  -H "Authorization: Bearer wacrm_live_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "phone": "+14155550123",
+        "name": "Jane Doe",
+        "company": "Acme",
+        "tags": ["vip", "onboarding"]
+      }'
+```
+
+<Note>
+  The HTTP status code (`200` vs. `201`) is the reliable signal for whether the contact already existed. Both responses contain the full contact object.
+</Note>
+
+---
+
+## `GET /api/v1/contacts/{id}`
+
+**Required scope:** `contacts:read`
+
+Returns a single contact by its UUID. Returns `404` if the contact does not exist **or** if it belongs to a different account — Wacrm never reveals that a resource exists in another account.
+
+```bash
+curl https://your-crm.example.com/api/v1/contacts/a1b2c3d4-… \
+  -H "Authorization: Bearer wacrm_live_xxx"
+```
+
+---
+
+## `PATCH /api/v1/contacts/{id}`
+
+**Required scope:** `contacts:write`
+
+Partially updates a contact. Only the fields you include in the request body are changed — omitted fields are left untouched. Sending `null` for a field clears it.
+
+### Request body
+
+<ParamField body="name" type="string | null">
+  Updated display name. Send `null` to clear.
+</ParamField>
+
+<ParamField body="email" type="string | null">
+  Updated email address. Send `null` to clear.
+</ParamField>
+
+<ParamField body="company" type="string | null">
+  Updated company name. Send `null` to clear.
+</ParamField>
+
+<ParamField body="tags" type="string[]">
+  An array of tag **names** that **replaces** the contact's current tag set entirely. Pass an empty array (`[]`) to remove all tags. Omit the field to leave tags unchanged.
+</ParamField>
+
+Returns `404` if the contact does not exist or belongs to a different account. On success, returns the updated contact object with HTTP `200`.
+
+```bash
+curl -X PATCH https://your-crm.example.com/api/v1/contacts/a1b2c3d4-… \
+  -H "Authorization: Bearer wacrm_live_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{ "company": "Acme Corp", "tags": ["vip"] }'
+```
+
+<Warning>
+  Sending `tags` in a `PATCH` request **replaces** the entire tag set. If you want to add a single tag without removing others, fetch the current tags first with `GET /api/v1/contacts/{id}`, merge locally, then send the full list.
+</Warning>

@@ -1,0 +1,137 @@
+---
+title: "Connect WhatsApp Business API to Wacrm"
+sidebarTitle: "WhatsApp"
+description: "Register your Meta Cloud API app, configure the webhook endpoint, obtain a permanent access token, and verify your phone number in Wacrm settings."
+---
+
+Wacrm uses the **Meta Cloud API** — the official WhatsApp Business API — to send and receive messages. You do not need a third-party gateway or a WhatsApp Business App installation; everything goes through Meta's infrastructure directly. This page covers creating a Meta app, wiring up the webhook, and saving your credentials inside Wacrm so the inbox and broadcasts go live.
+
+## Prerequisites
+
+- A [Meta Developer](https://developers.facebook.com) account
+- A Facebook Business account verified with Meta (required to send messages outside the 24-hour session window)
+- Wacrm already running and accessible at a **public HTTPS URL** — `localhost` does not work for the webhook registration step (see the warning below)
+
+<Steps>
+  <Step title="Create a Meta app and add the WhatsApp product">
+    1. Go to [developers.facebook.com/apps](https://developers.facebook.com/apps) and click **Create App**.
+    2. Choose **Business** as the app type and click **Next**.
+    3. Give your app a name (e.g. "My CRM"), associate it with your Business account, and click **Create App**.
+    4. In the app dashboard, find the **Add products to your app** section and click **Set up** next to **WhatsApp**.
+
+    Meta will walk you through a brief onboarding flow. Once complete, the **WhatsApp** section will appear in the left sidebar of your app dashboard.
+  </Step>
+
+  <Step title="Add and verify your business phone number">
+    In the **WhatsApp → Getting Started** section of your app dashboard:
+
+    1. Under **Step 1: Select phone numbers**, click **Add phone number**.
+    2. Enter your business display name and select a business category.
+    3. Enter the phone number you want to use. This number must not already be registered with WhatsApp on any device — if it is, you must first delete the existing WhatsApp account associated with it.
+    4. Verify the number with the OTP code Meta sends via SMS or voice call.
+
+    After verification, your number will appear with a **Phone Number ID** in the dashboard — you'll need this in a later step.
+
+    <Note>
+      Meta provides a free test number under **Getting Started** that you can use during development without registering your real business number. Messages sent to/from the test number are limited to five pre-approved recipient numbers, but it's sufficient to validate your Wacrm setup before going live.
+    </Note>
+  </Step>
+
+  <Step title="Collect your WhatsApp credentials">
+    From the **WhatsApp → API Setup** page (formerly called "Getting Started"), copy the following:
+
+    | Credential | Where to find it |
+    |---|---|
+    | **Phone Number ID** | Shown in the "From" phone number selector on the API Setup page |
+    | **WhatsApp Business Account ID (WABA ID)** | Shown just above the Phone Number ID |
+    | **Temporary Access Token** | Shown on the API Setup page — valid for 24 hours |
+
+    The temporary token is fine for testing, but **you must generate a permanent token before going to production**. To create a permanent token:
+
+    1. Go to **Business Settings → System Users** and create a System User with **Admin** role.
+    2. Click **Add Assets**, assign your WhatsApp app with **Full Control** permission.
+    3. Click **Generate Token** for that System User, select your app, and grant `whatsapp_business_messaging` and `whatsapp_business_management` permissions.
+    4. Copy the generated token — it does not expire unless explicitly revoked.
+
+    Add these to your `.env.local` (or host environment):
+
+    ```bash
+    # Meta App Secret — found in App Settings → Basic (next step)
+    META_APP_SECRET=your-meta-app-secret
+
+    # Encryption key for storing your WhatsApp access token at rest
+    # Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+    ENCRYPTION_KEY=your-64-char-hex-key
+    ```
+  </Step>
+
+  <Step title="Set META_APP_SECRET">
+    Wacrm verifies every inbound webhook POST using an HMAC-SHA256 signature that Meta includes in the `X-Hub-Signature-256` header. This requires your **App Secret**.
+
+    1. In the Meta app dashboard, go to **App Settings → Basic**.
+    2. Click **Show** next to the **App Secret** field and copy the value.
+    3. Set it as `META_APP_SECRET` in your environment:
+
+    ```bash
+    META_APP_SECRET=your-meta-app-secret
+    ```
+
+    <Warning>
+      This variable is **required**. Without it, Wacrm's webhook handler rejects every inbound request with a `401 Invalid signature` response and you will receive no messages.
+    </Warning>
+  </Step>
+
+  <Step title="Register the webhook with Meta">
+    1. In your Meta app dashboard, go to **WhatsApp → Configuration**.
+    2. Under **Webhook**, click **Edit**.
+    3. Set the **Callback URL** to:
+       ```
+       https://your-crm.example.com/api/whatsapp/webhook
+       ```
+    4. Set the **Verify Token** to any string you choose (e.g. a long random token). You will paste this same value into Wacrm in the next step.
+    5. Click **Verify and Save**. Meta sends a `GET` request to your webhook URL with `hub.mode=subscribe`, `hub.challenge`, and `hub.verify_token`. Wacrm automatically responds with the challenge value if the verify token matches — no extra configuration needed.
+    6. After verification succeeds, click **Manage** next to the webhook subscription and enable the **messages** field. This subscribes your app to inbound messages, delivery receipts, and read receipts.
+
+    <Note>
+      Wacrm handles the GET verification challenge automatically. It queries the `whatsapp_config` table for a matching verify token (stored encrypted), decrypts it, and returns the challenge string as plain text — exactly as Meta's spec requires. You do not need to write any verification code.
+    </Note>
+  </Step>
+
+  <Step title="Configure WhatsApp credentials in Wacrm">
+    With your app deployed and the webhook registered:
+
+    1. Open your Wacrm dashboard and navigate to **Settings → WhatsApp**.
+    2. Paste your **Permanent Access Token**, **Phone Number ID**, **WhatsApp Business Account ID**, and the **Verify Token** you chose in the previous step.
+    3. Click **Save**.
+
+    Wacrm encrypts the access token and verify token using AES-256-GCM before writing them to the database — the raw token values are never stored in plaintext. The encryption key is derived from `ENCRYPTION_KEY` in your environment.
+
+    Once saved, send a WhatsApp message to your registered number. It should appear in the Wacrm inbox within a few seconds.
+  </Step>
+</Steps>
+
+## Webhook security
+
+<Note>
+  Every inbound `POST` to `/api/whatsapp/webhook` is authenticated via the `X-Hub-Signature-256` header. Meta signs the raw request body with your `META_APP_SECRET` using HMAC-SHA256. Wacrm verifies this signature before processing any payload — requests with a missing or invalid signature are rejected with a `401` response. This prevents spoofed webhook deliveries from injecting fake messages into your inbox.
+</Note>
+
+<Warning>
+  The webhook endpoint must be reachable at a **public HTTPS URL**. `http://localhost:3000` will not work — Meta requires HTTPS and cannot reach your local machine.
+
+  For local development, use a tunnel tool such as:
+  - [**ngrok**](https://ngrok.com): `ngrok http 3000` gives you a temporary `https://*.ngrok-free.app` URL
+  - [**Cloudflare Tunnel**](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/): `cloudflare tunnel --url http://localhost:3000`
+
+  For production, deploy to Hostinger, Vercel, or any host that provides automatic HTTPS — the webhook URL becomes your production domain.
+</Warning>
+
+## Dry-run mode for templates
+
+When developing locally or running in CI, you can skip the actual Meta API call when submitting message templates by setting:
+
+```bash
+WHATSAPP_TEMPLATES_DRY_RUN=true
+```
+
+With this flag enabled, `POST /api/whatsapp/templates/submit` stores the template row in the database with a synthetic `dry-run-<uuid>` as the `meta_template_id` instead of calling the Meta API. This lets you exercise the full template creation UI and test downstream flows without a real WhatsApp Business Account. Leave this unset (or set to `false`) in production.
